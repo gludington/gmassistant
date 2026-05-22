@@ -7,3 +7,4 @@ dist/
 .claude/
 packages/backend/drizzle/meta/
 packages/backend/uploads/
+ROADMAP.md
