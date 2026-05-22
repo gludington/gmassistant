@@ -48,6 +48,8 @@ interface RunCombatant extends LiveCombatant {
   statBlock?: string | null;
   legendaryActionsMax?: number;
   legendaryActionsRemaining?: number;
+  legendaryResistancesMax?: number;
+  legendaryResistancesRemaining?: number;
   members?: { id: number; label: string; currentHp: number; maxHp: number; conditions: string[] }[];
 }
 
@@ -87,11 +89,20 @@ function toRunCombatant(c: BaseCombatant): RunCombatant {
   }
   const isGmOnly = c.type === 'event' || c.type === 'lair';
   let legendaryActionsMax: number | undefined;
+  let legendaryResistancesMax: number | undefined;
   if (c.statBlock) {
     try {
       const sb = JSON.parse(c.statBlock);
       const hasLegendary = (sb.actions ?? []).some((a: { action_type?: string }) => a.action_type === 'LEGENDARY_ACTION');
       if (hasLegendary) legendaryActionsMax = 3;
+      for (const trait of (sb.traits ?? []).concat(sb.actions ?? [])) {
+        const name: string = trait.name ?? '';
+        if (/legendary resistance/i.test(name)) {
+          const m = /\((\d+)/i.exec(name);
+          legendaryResistancesMax = m ? parseInt(m[1], 10) : 3;
+          break;
+        }
+      }
     } catch {}
   }
   return {
@@ -115,6 +126,8 @@ function toRunCombatant(c: BaseCombatant): RunCombatant {
     statBlock: c.statBlock ?? null,
     legendaryActionsMax,
     legendaryActionsRemaining: legendaryActionsMax,
+    legendaryResistancesMax,
+    legendaryResistancesRemaining: legendaryResistancesMax,
   };
 }
 
@@ -738,19 +751,36 @@ function CombatantRow({
         {onShowStatBlock && (
           <button style={s.editBtn} onClick={onShowStatBlock} title="View stat block">📖</button>
         )}
-        {c.legendaryActionsMax != null && (
-          <LegendaryWidget
-            max={c.legendaryActionsMax}
-            remaining={c.legendaryActionsRemaining ?? c.legendaryActionsMax}
-            onSpend={() => onUpdate({ legendaryActionsRemaining: Math.max(0, (c.legendaryActionsRemaining ?? c.legendaryActionsMax!) - 1) })}
-            onReset={() => onUpdate({ legendaryActionsRemaining: c.legendaryActionsMax })}
-            onSetMax={(n) => onUpdate({ legendaryActionsMax: n, legendaryActionsRemaining: n })}
-          />
+        {(c.legendaryActionsMax != null || c.legendaryResistancesMax != null) && (
+          <div style={{ width: '100%', display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+            {c.legendaryActionsMax != null && (
+              <LegendaryWidget
+                max={c.legendaryActionsMax}
+                remaining={c.legendaryActionsRemaining ?? c.legendaryActionsMax}
+                onSpend={() => onUpdate({ legendaryActionsRemaining: Math.max(0, (c.legendaryActionsRemaining ?? c.legendaryActionsMax!) - 1) })}
+                onRestore={() => onUpdate({ legendaryActionsRemaining: Math.min(c.legendaryActionsMax!, (c.legendaryActionsRemaining ?? c.legendaryActionsMax!) + 1) })}
+                onReset={() => onUpdate({ legendaryActionsRemaining: c.legendaryActionsMax })}
+                onSetMax={(n) => onUpdate({ legendaryActionsMax: n, legendaryActionsRemaining: n })}
+              />
+            )}
+            {c.legendaryResistancesMax != null && (
+              <ResistanceWidget
+                max={c.legendaryResistancesMax}
+                remaining={c.legendaryResistancesRemaining ?? c.legendaryResistancesMax}
+                onSpend={() => onUpdate({ legendaryResistancesRemaining: Math.max(0, (c.legendaryResistancesRemaining ?? c.legendaryResistancesMax!) - 1) })}
+                onRestore={() => onUpdate({ legendaryResistancesRemaining: Math.min(c.legendaryResistancesMax!, (c.legendaryResistancesRemaining ?? c.legendaryResistancesMax!) + 1) })}
+                onSetMax={(n) => onUpdate({ legendaryResistancesMax: n, legendaryResistancesRemaining: Math.min(c.legendaryResistancesRemaining ?? n, n) })}
+              />
+            )}
+          </div>
         )}
       </div>
 
       {/* HP / Description */}
       <div style={s.hpCell}>
+        {!isGmOnly && (c.type === 'enemy' || c.type === 'npc' || c.type === 'group') && c.description && (
+          <div style={{ fontSize: '0.75rem', color: '#999', fontStyle: 'italic' }}>{c.description}</div>
+        )}
         {isGmOnly ? (
           <span style={{ fontSize: '0.9rem', color: '#aaa', fontStyle: 'italic' }}>
             {c.description || <span style={{ color: '#555' }}>No description</span>}
@@ -1056,14 +1086,21 @@ function AddCombatantForm({
         </button>
         <button style={s.btnGhost} type="button" onClick={onCancel}>Cancel</button>
       </div>
-      {(type === 'event' || type === 'lair') && (
+      {(type === 'event' || type === 'lair') ? (
         <textarea
           style={{ ...s.addInput, width: '100%', marginTop: 8, minHeight: 60, resize: 'vertical', boxSizing: 'border-box' }}
           placeholder="Description (GM only — what happens when this triggers)"
           value={description}
           onChange={(e) => setDescription(e.target.value)}
         />
-      )}
+      ) : (type === 'enemy' || type === 'group' || type === 'npc') ? (
+        <textarea
+          style={{ ...s.addInput, width: '100%', marginTop: 8, minHeight: 48, resize: 'vertical', boxSizing: 'border-box' }}
+          placeholder="Notes (GM only — tactics, abilities, reminders)"
+          value={description}
+          onChange={(e) => setDescription(e.target.value)}
+        />
+      ) : null}
       {isGroup && (
         <div style={{ marginTop: 10 }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 6 }}>
@@ -1100,9 +1137,9 @@ function AddCombatantForm({
 
 // ── LegendaryWidget ───────────────────────────────────────────────────────────
 
-function LegendaryWidget({ max, remaining, onSpend, onReset, onSetMax }: {
+function LegendaryWidget({ max, remaining, onSpend, onRestore, onReset, onSetMax }: {
   max: number; remaining: number;
-  onSpend: () => void; onReset: () => void; onSetMax: (n: number) => void;
+  onSpend: () => void; onRestore: () => void; onReset: () => void; onSetMax: (n: number) => void;
 }) {
   return (
     <div style={lwWrap} title="Legendary actions">
@@ -1110,9 +1147,9 @@ function LegendaryWidget({ max, remaining, onSpend, onReset, onSetMax }: {
       {Array.from({ length: max }, (_, i) => (
         <button
           key={i}
-          style={{ ...lwPip, color: i < remaining ? '#ffd54f' : '#333', cursor: i < remaining ? 'pointer' : 'default' }}
-          onClick={i < remaining ? onSpend : undefined}
-          title={i < remaining ? 'Spend legendary action' : 'Spent'}
+          style={{ ...lwPip, color: i < remaining ? '#ffd54f' : '#333', cursor: 'pointer' }}
+          onClick={i < remaining ? onSpend : onRestore}
+          title={i < remaining ? 'Spend legendary action' : 'Restore one legendary action'}
         >●</button>
       ))}
       <button style={lwReset} onClick={onReset} title="Reset all">↺</button>
@@ -1121,6 +1158,45 @@ function LegendaryWidget({ max, remaining, onSpend, onReset, onSetMax }: {
     </div>
   );
 }
+
+// ── ResistanceWidget ──────────────────────────────────────────────────────────
+
+function ResistanceWidget({ max, remaining, onSpend, onRestore, onSetMax }: {
+  max: number; remaining: number;
+  onSpend: () => void; onRestore: () => void; onSetMax: (n: number) => void;
+}) {
+  return (
+    <div style={rwWrap} title="Legendary resistances (do not reset automatically)">
+      <span style={rwLabel}>🛡</span>
+      {Array.from({ length: max }, (_, i) => (
+        <button
+          key={i}
+          style={{ ...rwPip, color: i < remaining ? '#4dd0e1' : '#1a3a3a', cursor: 'pointer' }}
+          onClick={i < remaining ? onSpend : onRestore}
+          title={i < remaining ? 'Spend legendary resistance' : 'Restore one legendary resistance'}
+        >◆</button>
+      ))}
+      <button style={rwAdj} onClick={() => onSetMax(Math.max(1, max - 1))} title="Reduce max">−</button>
+      <button style={rwAdj} onClick={() => onSetMax(max + 1)} title="Increase max">+</button>
+    </div>
+  );
+}
+
+const rwWrap: React.CSSProperties = {
+  display: 'flex', alignItems: 'center', gap: 2,
+  background: '#0a1e22', border: '1px solid #1a4a4a',
+  borderRadius: 4, padding: '2px 6px', flexShrink: 0,
+};
+const rwLabel: React.CSSProperties = { fontSize: '0.75rem', marginRight: 2 };
+const rwPip: React.CSSProperties = {
+  background: 'none', border: 'none', fontSize: '0.85rem',
+  padding: '0 1px', lineHeight: 1,
+};
+const rwAdj: React.CSSProperties = {
+  background: 'none', border: '1px solid #1a4a4a', borderRadius: 3,
+  color: '#4dd0e1', cursor: 'pointer', fontSize: '0.65rem',
+  padding: '0 3px', lineHeight: '1.4', marginLeft: 1,
+};
 
 const lwWrap: React.CSSProperties = {
   display: 'flex', alignItems: 'center', gap: 2,

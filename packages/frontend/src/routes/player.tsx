@@ -1,5 +1,5 @@
 import { createFileRoute } from '@tanstack/react-router';
-import { useState, useCallback, useEffect } from 'react';
+import { useState, useCallback, useEffect, useMemo } from 'react';
 import type { BroadcastMessage, LiveCombatant, SceneFit } from '@gmassisstant/types';
 import { useBroadcastReceiver } from '../hooks/useBroadcast';
 import { conditionIcon } from '../conditions';
@@ -101,6 +101,17 @@ function PlayerScreen() {
 
   const sorted = [...combatants].sort((a, b) => (b.initiative ?? -999) - (a.initiative ?? -999));
 
+  // Estimate how many cards fit in one column, then derive column count.
+  // Card height estimate: ~90px for a simple combatant, ~130px for groups.
+  // Round badge is ~70px; padding accounts for the rest.
+  const colCount = useMemo(() => {
+    if (sorted.length <= 1) return 1;
+    const availableH = window.innerHeight - 90; // subtract round badge + top padding
+    const avgCardH = 100; // px — rough average including margin
+    const perCol = Math.max(1, Math.floor(availableH / avgCardH));
+    return Math.min(3, Math.ceil(sorted.length / perCol));
+  }, [sorted.length]);
+
   return (
     <div style={s.screen}>
       <style>{GLOBAL_STYLES}</style>
@@ -130,7 +141,7 @@ function PlayerScreen() {
             </div>
           )}
 
-          <div style={s.cards}>
+          <div style={{ ...s.cards, ...(colCount > 1 ? { columnCount: colCount, height: '100%' } : {}) }}>
             {sorted.map((c, i) => (
               <CombatantCard key={c.id} combatant={c} rank={i} showHp={showHp} showInitiative={showInitiative} isActive={c.id === activeCombatantId} />
             ))}
@@ -334,8 +345,8 @@ const s: Record<string, React.CSSProperties> = {
     position: 'absolute',
     top: 0,
     left: 0,
+    right: 0,
     bottom: 0,
-    width: 'clamp(800px, 92vw, 1800px)',
     zIndex: 10,
     display: 'flex',
     flexDirection: 'column' as const,
@@ -349,15 +360,14 @@ const s: Record<string, React.CSSProperties> = {
   },
   cards: {
     position: 'relative',
-    columnCount: 3,
     columnGap: '0.6rem',
     columnFill: 'auto' as const,
     padding: '0.8rem 1rem 2rem',
     flex: 1,
     minHeight: 0,
+    overflow: 'hidden',
   },
 
-  // ── Card ──────────────────────────────────────────────────────────────────
   // ── Card ──────────────────────────────────────────────────────────────────
   card: {
     breakInside: 'avoid' as const,

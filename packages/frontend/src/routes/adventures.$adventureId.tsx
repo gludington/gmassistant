@@ -866,14 +866,21 @@ function CombatantForm({
         </button>
         <button style={s.btnSecondary} type="button" onClick={onCancel}>Cancel</button>
       </div>
-      {(type === 'event' || type === 'lair') && (
+      {(type === 'event' || type === 'lair') ? (
         <textarea
           style={{ ...s.input, minHeight: 72, resize: 'vertical', marginTop: 4 }}
           placeholder="Description (GM only — what happens when this triggers)"
           value={description}
           onChange={(e) => setDescription(e.target.value)}
         />
-      )}
+      ) : (type === 'enemy' || type === 'group' || type === 'npc') ? (
+        <textarea
+          style={{ ...s.input, minHeight: 60, resize: 'vertical', marginTop: 4 }}
+          placeholder="Notes (GM only — tactics, abilities, reminders)"
+          value={description}
+          onChange={(e) => setDescription(e.target.value)}
+        />
+      ) : null}
       {type === 'group' && (
         <div style={{ marginTop: 8 }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 6 }}>
