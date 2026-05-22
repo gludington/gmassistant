@@ -1,0 +1,1173 @@
+import { createFileRoute, Link } from '@tanstack/react-router';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { useState, useRef } from 'react';
+import { useBroadcastSender } from '../hooks/useBroadcast';
+import type { SceneFit } from '@gmassisstant/types';
+import { Open5eSearch } from '../components/Open5eSearch';
+
+// ── Types ────────────────────────────────────────────────────────────────────
+
+interface Combatant {
+  id: number;
+  name: string;
+  maxHp: number;
+  initiativeModifier: number;
+  type: 'pc' | 'npc' | 'enemy' | 'group' | 'event' | 'lair';
+  color: string | null;
+  description: string | null;
+  visibleToPlayers: boolean;
+  members?: { id: number; label: string; maxHp: number }[];
+}
+
+interface Encounter {
+  id: number;
+  name: string;
+  description: string | null;
+  combatants: Combatant[];
+}
+
+interface SceneImage {
+  id: number;
+  sceneId: number;
+  filePath: string;
+  sortOrder: number;
+  fit: SceneFit;
+}
+
+interface ImageScene {
+  id: number;
+  name: string;
+  sortOrder: number;
+  images: SceneImage[];
+}
+
+interface Player {
+  id: number;
+  adventureId: number;
+  name: string;
+  maxHp: number;
+  initiativeModifier: number;
+  color: string | null;
+}
+
+interface AdventureDetail {
+  id: number;
+  name: string;
+  description: string | null;
+  showHp: boolean;
+  showInitiative: boolean;
+  players: Player[];
+  imageScenes: ImageScene[];
+  encounters: Encounter[];
+}
+
+// ── Route ────────────────────────────────────────────────────────────────────
+
+export const Route = createFileRoute('/adventures/$adventureId')({
+  component: AdventureDetailPage,
+});
+
+const HOVER_STYLE = `
+  .image-tile:hover .tile-overlay { opacity: 1 !important; }
+  .tile-icon-btn:disabled { opacity: 0.3; cursor: default; }
+`;
+
+function HoverStyles() {
+  return <style>{HOVER_STYLE}</style>;
+}
+
+// ── Page ─────────────────────────────────────────────────────────────────────
+
+function AdventureDetailPage() {
+  const { adventureId } = Route.useParams();
+  const qc = useQueryClient();
+  const qKey = ['adventure', adventureId];
+  const send = useBroadcastSender();
+
+  const { data, isLoading } = useQuery<AdventureDetail>({
+    queryKey: qKey,
+    queryFn: async () => {
+      const res = await fetch(`/api/adventures/${adventureId}`);
+      if (!res.ok) throw new Error('Failed to load adventure');
+      return res.json();
+    },
+  });
+
+  const invalidate = () => qc.invalidateQueries({ queryKey: qKey });
+
+  function blankPlayerScreen() {
+    send({ type: 'CLEAR_IMAGE' });
+    send({ type: 'TOGGLE_INITIATIVE', payload: { visible: false } });
+    try {
+      const raw = localStorage.getItem('gma:initiative');
+      if (raw) localStorage.setItem('gma:initiative', JSON.stringify({ ...JSON.parse(raw), visible: false }));
+    } catch {}
+  }
+
+  const toggleShowHp = useMutation({
+    mutationFn: async (showHp: boolean) => {
+      const res = await fetch(`/api/adventures/${adventureId}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name: data!.name, description: data!.description, showHp }),
+      });
+      if (!res.ok) throw new Error('Failed to update adventure');
+      return showHp;
+    },
+    onSuccess: (showHp) => {
+      invalidate();
+      send({ type: 'SET_SHOW_HP', payload: { showHp } });
+      try {
+        const raw = localStorage.getItem('gma:initiative');
+        if (raw) localStorage.setItem('gma:initiative', JSON.stringify({ ...JSON.parse(raw), showHp }));
+      } catch {}
+    },
+  });
+
+  const toggleShowInitiative = useMutation({
+    mutationFn: async (showInitiative: boolean) => {
+      const res = await fetch(`/api/adventures/${adventureId}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ showInitiative }),
+      });
+      if (!res.ok) throw new Error('Failed to update adventure');
+      return showInitiative;
+    },
+    onSuccess: (showInitiative) => {
+      invalidate();
+      send({ type: 'SET_SHOW_INITIATIVE', payload: { showInitiative } });
+      try {
+        const raw = localStorage.getItem('gma:initiative');
+        if (raw) localStorage.setItem('gma:initiative', JSON.stringify({ ...JSON.parse(raw), showInitiative }));
+      } catch {}
+    },
+  });
+
+  const addEncounter = useMutation({
+    mutationFn: async (body: { name: string; description: string }) => {
+      const res = await fetch('/api/encounters', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ adventureId: Number(adventureId), ...body }),
+      });
+      if (!res.ok) throw new Error('Failed to create encounter');
+    },
+    onSuccess: invalidate,
+  });
+
+  const deleteEncounter = useMutation({
+    mutationFn: async (id: number) => {
+      await fetch(`/api/encounters/${id}`, { method: 'DELETE' });
+    },
+    onSuccess: invalidate,
+  });
+
+  const addScene = useMutation({
+    mutationFn: async (name: string) => {
+      const res = await fetch('/api/adventures/scenes', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          adventureId: Number(adventureId),
+          name,
+          sortOrder: data?.imageScenes.length ?? 0,
+        }),
+      });
+      if (!res.ok) throw new Error('Failed to create scene');
+    },
+    onSuccess: invalidate,
+  });
+
+  const deleteScene = useMutation({
+    mutationFn: async (id: number) => {
+      await fetch(`/api/adventures/scenes/${id}`, { method: 'DELETE' });
+    },
+    onSuccess: invalidate,
+  });
+
+  const addPlayer = useMutation({
+    mutationFn: async (body: { name: string; maxHp: number; initiativeModifier: number; color: string }) => {
+      const res = await fetch('/api/adventures/players', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ adventureId: Number(adventureId), ...body }),
+      });
+      if (!res.ok) throw new Error('Failed to add player');
+    },
+    onSuccess: invalidate,
+  });
+
+  const [editingPlayerId, setEditingPlayerId] = useState<number | null>(null);
+  const [editingAdventure, setEditingAdventure] = useState(false);
+  const [adventureNameDraft, setAdventureNameDraft] = useState('');
+  const [adventureDescDraft, setAdventureDescDraft] = useState('');
+
+  const updateAdventure = useMutation({
+    mutationFn: async (body: { name: string; description: string }) => {
+      const res = await fetch(`/api/adventures/${adventureId}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ ...body, showHp: data!.showHp }),
+      });
+      if (!res.ok) throw new Error('Failed to update adventure');
+    },
+    onSuccess: () => { invalidate(); setEditingAdventure(false); },
+  });
+
+  function startEditingAdventure() {
+    setAdventureNameDraft(data!.name);
+    setAdventureDescDraft(data!.description ?? '');
+    setEditingAdventure(true);
+  }
+
+  const updatePlayer = useMutation({
+    mutationFn: async (body: { id: number; name: string; maxHp: number; initiativeModifier: number; color: string }) => {
+      const res = await fetch(`/api/adventures/players/${body.id}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name: body.name, maxHp: body.maxHp, initiativeModifier: body.initiativeModifier, color: body.color }),
+      });
+      if (!res.ok) throw new Error('Failed to update player');
+    },
+    onSuccess: () => { invalidate(); setEditingPlayerId(null); },
+  });
+
+  const deletePlayer = useMutation({
+    mutationFn: async (id: number) => {
+      await fetch(`/api/adventures/players/${id}`, { method: 'DELETE' });
+    },
+    onSuccess: invalidate,
+  });
+
+  if (isLoading) return <div style={s.page}><p style={s.muted}>Loading...</p></div>;
+  if (!data) return <div style={s.page}><p style={s.muted}>Adventure not found.</p></div>;
+
+  return (
+    <div style={s.page}>
+      <HoverStyles />
+      <header style={s.header}>
+        <Link to="/" style={s.back}>← Adventures</Link>
+        {editingAdventure ? (
+          <form
+            style={{ display: 'flex', flexDirection: 'column', gap: 6, flex: 1 }}
+            onSubmit={(e) => { e.preventDefault(); if (adventureNameDraft.trim()) updateAdventure.mutate({ name: adventureNameDraft.trim(), description: adventureDescDraft.trim() }); }}
+          >
+            <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+              <input
+                style={{ ...s.editInput, fontSize: '1.2rem', fontWeight: 700, flex: 1 }}
+                value={adventureNameDraft}
+                onChange={(e) => setAdventureNameDraft(e.target.value)}
+                autoFocus
+                onKeyDown={(e) => { if (e.key === 'Escape') setEditingAdventure(false); }}
+              />
+              <button style={s.btnPrimary} type="submit" disabled={!adventureNameDraft.trim() || updateAdventure.isPending}>Save</button>
+              <button style={s.btnGhost} type="button" onClick={() => setEditingAdventure(false)}>Cancel</button>
+            </div>
+            <input
+              style={{ ...s.editInput, fontSize: '0.875rem' }}
+              placeholder="Description (optional)"
+              value={adventureDescDraft}
+              onChange={(e) => setAdventureDescDraft(e.target.value)}
+            />
+          </form>
+        ) : (
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8, flex: 1 }}>
+            <h1 style={s.title}>{data.name}</h1>
+            <button style={s.btnGhost} onClick={startEditingAdventure} title="Edit adventure name">✎</button>
+          </div>
+        )}
+        <button
+          style={data.showInitiative ? s.btnActive : s.btnSecondary}
+          onClick={() => toggleShowInitiative.mutate(!data.showInitiative)}
+          disabled={toggleShowInitiative.isPending}
+          title={data.showInitiative ? 'Hide initiative from player screen' : 'Show initiative on player screen'}
+        >
+          {data.showInitiative ? '⚔ Hide Initiative' : '⚔ Show Initiative'}
+        </button>
+        <button
+          style={data.showHp ? s.btnActive : s.btnSecondary}
+          onClick={() => toggleShowHp.mutate(!data.showHp)}
+          disabled={toggleShowHp.isPending}
+          title={data.showHp ? 'Hide HP from player screen' : 'Show HP on player screen'}
+        >
+          {data.showHp ? '❤ Hide HP' : '❤ Show HP'}
+        </button>
+        <button style={s.btnDanger} onClick={blankPlayerScreen}>
+          Blank Screen
+        </button>
+        <button style={s.btnSecondary} onClick={() => window.open('/player', 'gmassisstant-player', 'width=1920,height=1080')}>
+          Open Player Screen
+        </button>
+      </header>
+
+      <main style={s.main}>
+        {data.description && <p style={s.desc}>{data.description}</p>}
+
+        {/* Players */}
+        <Section
+          title="Players"
+          count={data.players.length}
+          addLabel="+ Add Player"
+          addForm={(close) => (
+            <PlayerForm
+              onSubmit={(v) => addPlayer.mutate(v, { onSuccess: close })}
+              pending={addPlayer.isPending}
+              onCancel={close}
+            />
+          )}
+        >
+          {data.players.map((p) => (
+            editingPlayerId === p.id ? (
+              <PlayerForm
+                key={p.id}
+                initialValues={p}
+                onSubmit={(v) => updatePlayer.mutate({ id: p.id, ...v })}
+                pending={updatePlayer.isPending}
+                onCancel={() => setEditingPlayerId(null)}
+              />
+            ) : (
+              <div key={p.id} style={s.combatantRow}>
+                {p.color && <span style={{ ...s.colorDot, background: p.color }} />}
+                <span style={s.combatantName}>{p.name}</span>
+                <span style={s.combatantStat}>HP {p.maxHp}</span>
+                <span style={s.combatantStat}>
+                  Init {p.initiativeModifier >= 0 ? `+${p.initiativeModifier}` : p.initiativeModifier}
+                </span>
+                <span style={{ ...s.typeBadge, ...typeStyle('pc') }}>pc</span>
+                <button style={s.btnIcon} onClick={() => setEditingPlayerId(p.id)} title="Edit">✎</button>
+                <button style={s.btnIcon} onClick={() => deletePlayer.mutate(p.id)}>✕</button>
+              </div>
+            )
+          ))}
+        </Section>
+
+        {/* Image Scenes */}
+        <Section
+          title="Image Scenes"
+          count={data.imageScenes.length}
+          addLabel="+ Add Scene"
+          addForm={(close) => (
+            <SimpleNameForm
+              placeholder="Scene name"
+              submitLabel="Add Scene"
+              onSubmit={(name) => addScene.mutate(name, { onSuccess: close })}
+              pending={addScene.isPending}
+              onCancel={close}
+            />
+          )}
+        >
+          {data.imageScenes.map((scene) => (
+            <SceneCard
+              key={scene.id}
+              scene={scene}
+              onDelete={() => deleteScene.mutate(scene.id)}
+              onInvalidate={invalidate}
+              onSend={(filePath, fit) => {
+                send({ type: 'SHOW_IMAGE', payload: { filePath, fit } });
+                send({ type: 'TOGGLE_INITIATIVE', payload: { visible: false } });
+                try {
+                  const raw = localStorage.getItem('gma:initiative');
+                  if (raw) localStorage.setItem('gma:initiative', JSON.stringify({ ...JSON.parse(raw), visible: false }));
+                } catch {}
+              }}
+              onClearPlayer={() => send({ type: 'CLEAR_IMAGE' })}
+            />
+          ))}
+        </Section>
+
+        {/* Encounters */}
+        <Section
+          title="Encounters"
+          count={data.encounters.length}
+          addLabel="+ Add Encounter"
+          addForm={(close) => (
+            <EncounterForm
+              onSubmit={(v) => addEncounter.mutate(v, { onSuccess: close })}
+              pending={addEncounter.isPending}
+              onCancel={close}
+            />
+          )}
+        >
+          {data.encounters.map((e) => (
+            <EncounterCard
+              key={e.id}
+              encounter={e}
+              onDelete={() => deleteEncounter.mutate(e.id)}
+              onInvalidate={invalidate}
+            />
+          ))}
+        </Section>
+      </main>
+    </div>
+  );
+}
+
+// ── SceneCard ─────────────────────────────────────────────────────────────────
+
+function SceneCard({
+  scene,
+  onDelete,
+  onInvalidate,
+  onSend,
+  onClearPlayer,
+}: {
+  scene: ImageScene;
+  onDelete: () => void;
+  onInvalidate: () => void;
+  onSend: (filePath: string, fit: SceneFit) => void;
+  onClearPlayer: () => void;
+}) {
+  const [expanded, setExpanded] = useState(false);
+  const [uploading, setUploading] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
+
+  const updateImageFit = useMutation({
+    mutationFn: async ({ id, fit }: { id: number; fit: SceneFit }) => {
+      await fetch(`/api/adventures/scenes/images/${id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ fit }),
+      });
+    },
+    onSuccess: onInvalidate,
+  });
+
+  const addImage = useMutation({
+    mutationFn: async ({ url, sortOrder }: { url: string; sortOrder: number }) => {
+      const res = await fetch('/api/adventures/scenes/images', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ sceneId: scene.id, filePath: url, sortOrder }),
+      });
+      if (!res.ok) throw new Error('Failed to add image');
+    },
+    onSuccess: onInvalidate,
+  });
+
+  const removeImage = useMutation({
+    mutationFn: async (imageId: number) => {
+      await fetch(`/api/adventures/scenes/images/${imageId}`, { method: 'DELETE' });
+    },
+    onSuccess: onInvalidate,
+  });
+
+  const moveImage = useMutation({
+    mutationFn: async ({ id, sortOrder }: { id: number; sortOrder: number }) => {
+      await fetch(`/api/adventures/scenes/images/${id}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ sortOrder }),
+      });
+    },
+    onSuccess: onInvalidate,
+  });
+
+  async function handleFiles(files: FileList | null) {
+    if (!files || files.length === 0) return;
+    setUploading(true);
+    const baseOrder = scene.images.length;
+    try {
+      for (let i = 0; i < files.length; i++) {
+        const form = new FormData();
+        form.append('file', files[i]);
+        const res = await fetch('/api/uploads', { method: 'POST', body: form });
+        if (!res.ok) continue;
+        const { url } = await res.json() as { url: string };
+        await addImage.mutateAsync({ url, sortOrder: baseOrder + i });
+      }
+    } finally {
+      setUploading(false);
+      if (fileInputRef.current) fileInputRef.current.value = '';
+    }
+  }
+
+  function handleMove(index: number, direction: -1 | 1) {
+    const sorted = [...scene.images].sort((a, b) => a.sortOrder - b.sortOrder);
+    const target = sorted[index + direction];
+    const current = sorted[index];
+    if (!target) return;
+    moveImage.mutate({ id: current.id, sortOrder: target.sortOrder });
+    moveImage.mutate({ id: target.id, sortOrder: current.sortOrder });
+  }
+
+  const sorted = [...scene.images].sort((a, b) => a.sortOrder - b.sortOrder);
+
+  return (
+    <div style={s.sceneWrapper}>
+      <div style={s.card}>
+        <div style={s.cardBody}>
+          <strong style={s.cardTitle}>{scene.name}</strong>
+        </div>
+        <div style={s.cardRight}>
+          <span style={s.badge}>{scene.images.length} images</span>
+          <button style={s.btnSecondarySmall} onClick={() => setExpanded((v) => !v)}>
+            {expanded ? 'Close' : 'Manage'}
+          </button>
+          <button style={s.btnIcon} onClick={onDelete}>✕</button>
+        </div>
+      </div>
+
+      {expanded && (
+        <div style={s.sceneDetail}>
+          <div style={s.sceneToolbar}>
+            <button
+              style={s.btnPrimary}
+              onClick={() => fileInputRef.current?.click()}
+              disabled={uploading}
+            >
+              {uploading ? 'Uploading...' : '+ Add Images'}
+            </button>
+            <button style={s.btnSecondarySmall} onClick={onClearPlayer}>
+              Clear Player Screen
+            </button>
+            <input
+              ref={fileInputRef}
+              type="file"
+              accept="image/*"
+              multiple
+              style={{ display: 'none' }}
+              onChange={(e) => handleFiles(e.target.files)}
+            />
+          </div>
+
+          {sorted.length === 0 && (
+            <p style={s.muted}>No images yet. Add some to get started.</p>
+          )}
+
+          <div style={s.imageGrid}>
+            {sorted.map((img, index) => (
+              <div key={img.id} style={s.imageTileWrapper}>
+                <div style={s.imageTile} className="image-tile">
+                  <img src={img.filePath} alt="" style={s.thumbnail} />
+                  <div style={s.tileOverlay} className="tile-overlay">
+                    <button
+                      style={s.tileBtn}
+                      title="Push to player screen"
+                      onClick={() => onSend(img.filePath, img.fit)}
+                    >
+                      ▶ Show
+                    </button>
+                    <div style={s.tileActions}>
+                      <button
+                        style={s.tileIconBtn}
+                        className="tile-icon-btn"
+                        disabled={index === 0}
+                        onClick={() => handleMove(index, -1)}
+                        title="Move left"
+                      >←</button>
+                      <button
+                        style={s.tileIconBtn}
+                        className="tile-icon-btn"
+                        disabled={index === sorted.length - 1}
+                        onClick={() => handleMove(index, 1)}
+                        title="Move right"
+                      >→</button>
+                      <button
+                        style={{ ...s.tileIconBtn, color: '#e05c5c' }}
+                        onClick={() => removeImage.mutate(img.id)}
+                        title="Remove"
+                      >✕</button>
+                    </div>
+                  </div>
+                </div>
+                <div style={s.fitToggle}>
+                  {(['cover', 'fit', 'center'] as SceneFit[]).map((f) => (
+                    <button
+                      key={f}
+                      style={img.fit === f ? s.fitBtnActive : s.fitBtn}
+                      onClick={() => updateImageFit.mutate({ id: img.id, fit: f })}
+                      title={f === 'cover' ? 'Fill screen (crop)' : f === 'fit' ? 'Fit to screen (letterbox)' : 'Natural size (centered)'}
+                    >
+                      {f}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ── EncounterCard ─────────────────────────────────────────────────────────────
+
+function EncounterCard({
+  encounter, onDelete, onInvalidate,
+}: {
+  encounter: Encounter;
+  onDelete: () => void;
+  onInvalidate: () => void;
+}) {
+  const [expanded, setExpanded] = useState(false);
+
+  return (
+    <div style={s.sceneWrapper}>
+      <div style={s.card}>
+        <div style={s.cardBody}>
+          <strong style={s.cardTitle}>{encounter.name}</strong>
+          {encounter.description && <p style={s.cardDesc}>{encounter.description}</p>}
+        </div>
+        <div style={s.cardRight}>
+          <span style={s.badge}>{encounter.combatants.length} combatants</span>
+          <Link
+            to="/run/$encounterId"
+            params={{ encounterId: String(encounter.id) }}
+            style={s.btnRun}
+          >
+            ▶ Run
+          </Link>
+          <button style={s.btnSecondarySmall} onClick={() => setExpanded((v) => !v)}>
+            {expanded ? 'Close' : 'Manage'}
+          </button>
+          <button style={s.btnIcon} onClick={onDelete}>✕</button>
+        </div>
+      </div>
+      {expanded && (
+        <CombatantManager encounter={encounter} onInvalidate={onInvalidate} />
+      )}
+    </div>
+  );
+}
+
+// ── CombatantManager ──────────────────────────────────────────────────────────
+
+function CombatantManager({ encounter, onInvalidate }: { encounter: Encounter; onInvalidate: () => void }) {
+  const [showForm, setShowForm] = useState(false);
+  const [editingId, setEditingId] = useState<number | null>(null);
+  const send = useBroadcastSender();
+
+  const addCombatant = useMutation({
+    mutationFn: async (body: { name: string; maxHp: number; initiativeModifier: number; type: Combatant['type']; color: string; description: string | null; visibleToPlayers: boolean; members?: { label: string; maxHp: number }[] }) => {
+      const res = await fetch('/api/encounters/combatants', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ encounterId: encounter.id, ...body }),
+      });
+      if (!res.ok) throw new Error('Failed to add combatant');
+      return res.json() as Promise<Combatant & { members?: { id: number; label: string; maxHp: number }[] }>;
+    },
+    onSuccess: (created) => {
+      onInvalidate();
+      setShowForm(false);
+      send({ type: 'COMBATANT_ADDED', payload: { encounterId: encounter.id, combatant: { id: created.id, name: created.name, maxHp: created.maxHp, initiativeModifier: created.initiativeModifier, type: created.type, color: created.color, description: created.description, visibleToPlayers: created.visibleToPlayers, ...(created.members ? { members: created.members } : {}) } } });
+    },
+  });
+
+  const updateCombatant = useMutation({
+    mutationFn: async (body: { id: number; name: string; maxHp: number; initiativeModifier: number; type: Combatant['type']; color: string; description: string | null; visibleToPlayers: boolean; members?: { label: string; maxHp: number }[] }) => {
+      const res = await fetch(`/api/encounters/combatants/${body.id}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name: body.name, maxHp: body.maxHp, initiativeModifier: body.initiativeModifier, type: body.type, color: body.color, description: body.description, visibleToPlayers: body.visibleToPlayers, ...(body.members ? { members: body.members } : {}) }),
+      });
+      if (!res.ok) throw new Error('Failed to update combatant');
+      return res.json() as Promise<Combatant & { members?: { id: number; label: string; maxHp: number }[] }>;
+    },
+    onSuccess: (updated) => {
+      onInvalidate();
+      setEditingId(null);
+      send({ type: 'COMBATANT_UPDATED', payload: { encounterId: encounter.id, combatant: { id: updated.id, name: updated.name, maxHp: updated.maxHp, initiativeModifier: updated.initiativeModifier, type: updated.type, color: updated.color, ...(updated.members ? { members: updated.members } : {}) } } });
+    },
+  });
+
+  const removeCombatant = useMutation({
+    mutationFn: async (id: number) => {
+      await fetch(`/api/encounters/combatants/${id}`, { method: 'DELETE' });
+      return id;
+    },
+    onSuccess: (id) => {
+      onInvalidate();
+      send({ type: 'COMBATANT_REMOVED', payload: { encounterId: encounter.id, combatantId: id } });
+    },
+  });
+
+  return (
+    <div style={s.sceneDetail}>
+      {encounter.combatants.length === 0 && !showForm && (
+        <p style={s.muted}>No combatants yet.</p>
+      )}
+
+      {encounter.combatants.map((c) => (
+        editingId === c.id ? (
+          <CombatantForm
+            key={c.id}
+            initialValues={c}
+            onSubmit={(v) => updateCombatant.mutate({ id: c.id, ...v })}
+            pending={updateCombatant.isPending}
+            onCancel={() => setEditingId(null)}
+          />
+        ) : (
+          <div key={c.id} style={{ marginBottom: 4 }}>
+            <div style={{ ...s.combatantRow, flexWrap: 'wrap' as const }}>
+              {c.color && <span style={{ ...s.colorDot, background: c.color }} />}
+              <span style={s.combatantName}>{c.name}</span>
+              {c.type !== 'group' && c.type !== 'event' && c.type !== 'lair' && <span style={s.combatantStat}>HP {c.maxHp}</span>}
+              <span style={s.combatantStat}>
+                Init {c.initiativeModifier >= 0 ? `+${c.initiativeModifier}` : c.initiativeModifier}
+              </span>
+              <span style={{ ...s.typeBadge, ...typeStyle(c.type) }}>{c.type === 'lair' ? 'lair action' : c.type}</span>
+              {(c.type === 'event' || c.type === 'lair') && c.description && (
+                <span style={{ width: '100%', fontSize: '0.8rem', color: '#aaa', fontStyle: 'italic', paddingLeft: 18, marginTop: 2 }}>
+                  {c.description}
+                </span>
+              )}
+              <button
+                style={{ ...s.btnIcon, color: c.visibleToPlayers ? '#4caf50' : '#555' }}
+                title={c.visibleToPlayers ? 'Visible to players (click to hide)' : 'Hidden from players (click to show)'}
+                onClick={() => updateCombatant.mutate({ id: c.id, name: c.name, maxHp: c.maxHp, initiativeModifier: c.initiativeModifier, type: c.type, color: c.color ?? '#888888', description: c.description, visibleToPlayers: !c.visibleToPlayers })}
+              >👁</button>
+              <button style={s.btnIcon} onClick={() => setEditingId(c.id)} title="Edit">✎</button>
+              <button style={s.btnIcon} onClick={() => removeCombatant.mutate(c.id)}>✕</button>
+            </div>
+            {c.type === 'group' && c.members && c.members.length > 0 && (
+              <div style={{ paddingLeft: 18, display: 'flex', flexWrap: 'wrap', gap: 4, marginTop: 2 }}>
+                {c.members.map((m) => (
+                  <span key={m.id} style={s.memberChip}>
+                    {m.label} <span style={{ opacity: 0.7 }}>HP {m.maxHp}</span>
+                  </span>
+                ))}
+              </div>
+            )}
+          </div>
+        )
+      ))}
+
+      {showForm ? (
+        <CombatantForm
+          onSubmit={(v) => addCombatant.mutate(v)}
+          pending={addCombatant.isPending}
+          onCancel={() => setShowForm(false)}
+        />
+      ) : (
+        <button style={{ ...s.btnSecondarySmall, marginTop: 8 }} onClick={() => setShowForm(true)}>
+          + Add Combatant
+        </button>
+      )}
+    </div>
+  );
+}
+
+// ── CombatantForm ─────────────────────────────────────────────────────────────
+
+function CombatantForm({
+  onSubmit, pending, onCancel, initialValues,
+}: {
+  onSubmit: (v: { name: string; maxHp: number; initiativeModifier: number; type: Combatant['type']; color: string; description: string | null; visibleToPlayers: boolean; members?: { label: string; maxHp: number }[] }) => void;
+  pending: boolean;
+  onCancel: () => void;
+  initialValues?: { name: string; maxHp: number; initiativeModifier: number; type: Combatant['type']; color: string | null; description?: string | null; visibleToPlayers?: boolean; members?: { id: number; label: string; maxHp: number }[] };
+}) {
+  const [name, setName] = useState(initialValues?.name ?? '');
+  const [maxHp, setMaxHp] = useState(initialValues?.maxHp ?? 10);
+  const [initMod, setInitMod] = useState(initialValues?.initiativeModifier ?? 0);
+  const [type, setType] = useState<Combatant['type']>(initialValues?.type ?? 'enemy');
+  const [color, setColor] = useState(initialValues?.color ?? '#888888');
+  const [description, setDescription] = useState(initialValues?.description ?? '');
+  const [visibleToPlayers, setVisibleToPlayers] = useState(
+    initialValues?.visibleToPlayers ?? (initialValues?.type === 'event' || initialValues?.type === 'lair' ? false : true)
+  );
+  const [members, setMembers] = useState<{ label: string; maxHp: number }[]>(
+    initialValues?.members?.map((m) => ({ label: m.label, maxHp: m.maxHp })) ?? []
+  );
+
+  function handleSubmit(e: React.FormEvent) {
+    e.preventDefault();
+    if (!name.trim()) return;
+    if (type === 'group' && members.length === 0) return;
+    const computedMaxHp = type === 'group' ? members.reduce((s, m) => s + m.maxHp, 0) : maxHp;
+    const isGmOnly = type === 'event' || type === 'lair';
+    onSubmit({ name: name.trim(), maxHp: computedMaxHp, initiativeModifier: initMod, type, color, description: description.trim() || null, visibleToPlayers: isGmOnly ? false : visibleToPlayers, ...(type === 'group' ? { members } : {}) });
+  }
+
+  function addMember() {
+    setMembers((prev) => [...prev, { label: '', maxHp: 10 }]);
+  }
+
+  function updateMember(i: number, field: 'label' | 'maxHp', value: string | number) {
+    setMembers((prev) => prev.map((m, idx) => idx === i ? { ...m, [field]: value } : m));
+  }
+
+  function removeMember(i: number) {
+    setMembers((prev) => prev.filter((_, idx) => idx !== i));
+  }
+
+  const isGroupInvalid = type === 'group' && members.length === 0;
+
+  return (
+    <form style={{ ...s.form, marginTop: 8 }} onSubmit={handleSubmit}>
+      {!initialValues && (
+        <Open5eSearch
+          onSelect={(m) => { setName(m.name); setMaxHp(m.maxHp); setInitMod(m.initiativeModifier); setType('enemy'); }}
+        />
+      )}
+      <div style={s.formRow}>
+        <input style={{ ...s.input, flex: 2 }} placeholder="Name" value={name} onChange={(e) => setName(e.target.value)} autoFocus />
+        {type !== 'group' && type !== 'event' && type !== 'lair' && (
+          <label style={s.formLabel}>
+            HP
+            <input style={{ ...s.input, width: 72 }} type="number" min={1} value={maxHp} onChange={(e) => setMaxHp(Number(e.target.value))} />
+          </label>
+        )}
+        <label style={s.formLabel}>
+          Init mod
+          <input style={{ ...s.input, width: 64 }} type="number" value={initMod} onChange={(e) => setInitMod(Number(e.target.value))} />
+        </label>
+      </div>
+      <div style={s.formRow}>
+        <select style={s.input} value={type} onChange={(e) => setType(e.target.value as Combatant['type'])}>
+          <option value="enemy">Enemy</option>
+          <option value="npc">NPC</option>
+          <option value="pc">PC</option>
+          <option value="group">Group</option>
+          <option value="event">Event</option>
+          <option value="lair">Lair Action</option>
+        </select>
+        <label style={s.formLabel}>
+          Color
+          <input type="color" value={color} onChange={(e) => setColor(e.target.value)} style={{ width: 40, height: 32, border: 'none', background: 'none', cursor: 'pointer' }} />
+        </label>
+        <label style={s.formLabel}>
+          Visible
+          <button
+            type="button"
+            style={{ ...s.btnIcon, color: visibleToPlayers ? '#4caf50' : '#555', height: 32 }}
+            title={visibleToPlayers ? 'Visible to players' : 'Hidden from players'}
+            onClick={() => setVisibleToPlayers((v) => !v)}
+          >👁</button>
+        </label>
+        <button style={s.btnPrimary} type="submit" disabled={pending || !name.trim() || isGroupInvalid}>
+          {pending ? (initialValues ? 'Saving...' : 'Adding...') : (initialValues ? 'Save' : 'Add Combatant')}
+        </button>
+        <button style={s.btnSecondary} type="button" onClick={onCancel}>Cancel</button>
+      </div>
+      {(type === 'event' || type === 'lair') && (
+        <textarea
+          style={{ ...s.input, minHeight: 72, resize: 'vertical', marginTop: 4 }}
+          placeholder="Description (GM only — what happens when this triggers)"
+          value={description}
+          onChange={(e) => setDescription(e.target.value)}
+        />
+      )}
+      {type === 'group' && (
+        <div style={{ marginTop: 8 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 6 }}>
+            <span style={{ fontSize: '0.8rem', color: '#888' }}>Members ({members.length})</span>
+            <button type="button" style={s.btnSecondarySmall} onClick={addMember}>+ Add Member</button>
+          </div>
+          {members.map((m, i) => (
+            <div key={i} style={{ display: 'flex', gap: 6, alignItems: 'center', marginBottom: 4 }}>
+              <input
+                style={{ ...s.input, width: 80 }}
+                placeholder="Label"
+                value={m.label}
+                onChange={(e) => updateMember(i, 'label', e.target.value)}
+              />
+              <label style={s.formLabel}>
+                HP
+                <input
+                  style={{ ...s.input, width: 64 }}
+                  type="number"
+                  min={1}
+                  value={m.maxHp}
+                  onChange={(e) => updateMember(i, 'maxHp', Number(e.target.value))}
+                />
+              </label>
+              <button type="button" style={s.btnIcon} onClick={() => removeMember(i)}>✕</button>
+            </div>
+          ))}
+          {members.length === 0 && <p style={{ ...s.muted, fontSize: '0.75rem' }}>Add at least one member.</p>}
+        </div>
+      )}
+    </form>
+  );
+}
+
+function PlayerForm({
+  onSubmit, pending, onCancel, initialValues,
+}: {
+  onSubmit: (v: { name: string; maxHp: number; initiativeModifier: number; color: string }) => void;
+  pending: boolean;
+  onCancel: () => void;
+  initialValues?: { name: string; maxHp: number; initiativeModifier: number; color: string | null };
+}) {
+  const [name, setName] = useState(initialValues?.name ?? '');
+  const [maxHp, setMaxHp] = useState(initialValues?.maxHp ?? 10);
+  const [initMod, setInitMod] = useState(initialValues?.initiativeModifier ?? 0);
+  const [color, setColor] = useState(initialValues?.color ?? '#4caf50');
+
+  function handleSubmit(e: React.FormEvent) {
+    e.preventDefault();
+    if (!name.trim()) return;
+    onSubmit({ name: name.trim(), maxHp, initiativeModifier: initMod, color });
+  }
+
+  return (
+    <form style={{ ...s.form, marginTop: 8 }} onSubmit={handleSubmit}>
+      <div style={s.formRow}>
+        <input style={{ ...s.input, flex: 2 }} placeholder="Player name" value={name} onChange={(e) => setName(e.target.value)} autoFocus />
+        <label style={s.formLabel}>
+          Max HP
+          <input style={{ ...s.input, width: 72 }} type="number" min={1} value={maxHp} onChange={(e) => setMaxHp(Number(e.target.value))} />
+        </label>
+        <label style={s.formLabel}>
+          Init mod
+          <input style={{ ...s.input, width: 64 }} type="number" value={initMod} onChange={(e) => setInitMod(Number(e.target.value))} />
+        </label>
+        <label style={s.formLabel}>
+          Color
+          <input type="color" value={color} onChange={(e) => setColor(e.target.value)} style={{ width: 40, height: 32, border: 'none', background: 'none', cursor: 'pointer' }} />
+        </label>
+      </div>
+      <div style={{ display: 'flex', gap: 8 }}>
+        <button style={s.btnPrimary} type="submit" disabled={pending || !name.trim()}>
+          {pending ? 'Saving...' : initialValues ? 'Save' : 'Add Player'}
+        </button>
+        <button style={s.btnSecondary} type="button" onClick={onCancel}>Cancel</button>
+      </div>
+    </form>
+  );
+}
+
+function typeStyle(type: Combatant['type']): React.CSSProperties {
+  if (type === 'pc') return { background: '#1a3a1a', color: '#4caf50', borderColor: '#2d5a2d' };
+  if (type === 'npc') return { background: '#1a2a3a', color: '#64b5f6', borderColor: '#1e3a5a' };
+  if (type === 'group') return { background: '#2a1a3a', color: '#ce93d8', borderColor: '#4a2a5a' };
+  if (type === 'event') return { background: '#2a2a1a', color: '#ffd54f', borderColor: '#4a4a1e' };
+  if (type === 'lair') return { background: '#1a2a2a', color: '#80cbc4', borderColor: '#1e4a4a' };
+  return { background: '#3a1a1a', color: '#ef5350', borderColor: '#5a1e1e' };
+}
+
+// ── Shared sub-components ────────────────────────────────────────────────────
+
+function Section({
+  title, count, addLabel, addForm, children,
+}: {
+  title: string;
+  count: number;
+  addLabel: string;
+  addForm: (close: () => void) => React.ReactNode;
+  children: React.ReactNode;
+}) {
+  const [open, setOpen] = useState(false);
+  return (
+    <section style={s.section}>
+      <div style={s.sectionHeader}>
+        <h2 style={s.sectionTitle}>{title} ({count})</h2>
+        <button style={s.btnPrimary} onClick={() => setOpen((v) => !v)}>
+          {open ? 'Cancel' : addLabel}
+        </button>
+      </div>
+      {open && addForm(() => setOpen(false))}
+      {children}
+      {count === 0 && !open && <p style={s.muted}>None yet.</p>}
+    </section>
+  );
+}
+
+function SimpleNameForm({
+  placeholder, submitLabel, onSubmit, pending, onCancel,
+}: {
+  placeholder: string;
+  submitLabel: string;
+  onSubmit: (name: string) => void;
+  pending: boolean;
+  onCancel: () => void;
+}) {
+  const [name, setName] = useState('');
+  return (
+    <form style={s.form} onSubmit={(e) => { e.preventDefault(); if (name.trim()) onSubmit(name.trim()); }}>
+      <input style={s.input} placeholder={placeholder} value={name} onChange={(e) => setName(e.target.value)} autoFocus />
+      <div style={{ display: 'flex', gap: 8 }}>
+        <button style={s.btnPrimary} type="submit" disabled={pending || !name.trim()}>
+          {pending ? 'Adding...' : submitLabel}
+        </button>
+        <button style={s.btnSecondary} type="button" onClick={onCancel}>Cancel</button>
+      </div>
+    </form>
+  );
+}
+
+function EncounterForm({
+  onSubmit, pending, onCancel,
+}: {
+  onSubmit: (v: { name: string; description: string }) => void;
+  pending: boolean;
+  onCancel: () => void;
+}) {
+  const [name, setName] = useState('');
+  const [desc, setDesc] = useState('');
+  return (
+    <form style={s.form} onSubmit={(e) => { e.preventDefault(); if (name.trim()) onSubmit({ name: name.trim(), description: desc.trim() }); }}>
+      <input style={s.input} placeholder="Encounter name" value={name} onChange={(e) => setName(e.target.value)} autoFocus />
+      <textarea
+        style={{ ...s.input, minHeight: 72, resize: 'vertical' }}
+        placeholder="Description (optional)"
+        value={desc}
+        onChange={(e) => setDesc(e.target.value)}
+      />
+      <div style={{ display: 'flex', gap: 8 }}>
+        <button style={s.btnPrimary} type="submit" disabled={pending || !name.trim()}>
+          {pending ? 'Adding...' : 'Add Encounter'}
+        </button>
+        <button style={s.btnSecondary} type="button" onClick={onCancel}>Cancel</button>
+      </div>
+    </form>
+  );
+}
+
+// ── Styles ───────────────────────────────────────────────────────────────────
+
+const s: Record<string, React.CSSProperties> = {
+  page: { minHeight: '100vh', background: '#1a1a2e', color: '#e0e0e0' },
+  header: {
+    padding: '16px 32px', borderBottom: '1px solid #2a2a4a',
+    background: '#16213e', display: 'flex', alignItems: 'center', gap: 16,
+  },
+  back: { color: '#c9a84c', textDecoration: 'none', fontSize: '0.875rem' },
+  title: { margin: 0, fontSize: '1.5rem', color: '#c9a84c' },
+  main: { padding: '32px', maxWidth: 900, margin: '0 auto' },
+  desc: { color: '#999', marginBottom: 32 },
+  section: { marginBottom: 48 },
+  sectionHeader: { display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12 },
+  sectionTitle: { margin: 0, fontSize: '1.1rem' },
+  form: {
+    display: 'flex', flexDirection: 'column', gap: 8,
+    marginBottom: 16, padding: 16, background: '#16213e',
+    borderRadius: 8, border: '1px solid #2a2a4a',
+  },
+  input: {
+    background: '#1a1a2e', border: '1px solid #3a3a5a', borderRadius: 4,
+    color: '#e0e0e0', padding: '8px 12px', fontSize: '1rem',
+  },
+  card: {
+    display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+    padding: 12, background: '#16213e', border: '1px solid #2a2a4a',
+    borderRadius: 8, marginBottom: 2,
+  },
+  cardBody: { flex: 1 },
+  cardTitle: { fontSize: '1rem' },
+  cardDesc: { margin: '4px 0 0', fontSize: '0.8rem', color: '#999' },
+  cardRight: { display: 'flex', alignItems: 'center', gap: 8, flexShrink: 0 },
+  sceneWrapper: { marginBottom: 8 },
+  sceneDetail: {
+    background: '#0f0f1f', border: '1px solid #2a2a4a', borderTop: 'none',
+    borderRadius: '0 0 8px 8px', padding: 16,
+  },
+  sceneToolbar: { display: 'flex', gap: 8, marginBottom: 16, alignItems: 'center' },
+  imageGrid: {
+    display: 'grid',
+    gridTemplateColumns: 'repeat(auto-fill, minmax(160px, 1fr))',
+    gap: 8,
+  },
+  imageTileWrapper: {
+    display: 'flex', flexDirection: 'column' as const, gap: 4,
+  },
+  imageTile: {
+    position: 'relative', borderRadius: 6, overflow: 'hidden',
+    aspectRatio: '16/9', background: '#1a1a2e', cursor: 'pointer',
+  },
+  thumbnail: { width: '100%', height: '100%', objectFit: 'cover', display: 'block' },
+  tileOverlay: {
+    position: 'absolute', inset: 0,
+    background: 'rgba(0,0,0,0.6)',
+    display: 'flex', flexDirection: 'column',
+    alignItems: 'center', justifyContent: 'center',
+    gap: 6, opacity: 0,
+    transition: 'opacity 0.15s',
+    // CSS :hover can't be done inline — see note below
+  },
+  tileBtn: {
+    background: '#c9a84c', color: '#1a1a2e', border: 'none',
+    padding: '5px 12px', borderRadius: 4, cursor: 'pointer',
+    fontWeight: 700, fontSize: '0.8rem',
+  },
+  tileActions: { display: 'flex', gap: 4 },
+  tileIconBtn: {
+    background: 'rgba(255,255,255,0.1)', color: '#fff', border: '1px solid rgba(255,255,255,0.2)',
+    width: 28, height: 28, borderRadius: 4, cursor: 'pointer',
+    fontSize: '0.8rem', display: 'flex', alignItems: 'center', justifyContent: 'center',
+  },
+  fitToggle: { display: 'flex', gap: 2 },
+  fitBtn: {
+    padding: '3px 7px', background: 'transparent', color: '#666',
+    border: '1px solid #444', borderRadius: 4, cursor: 'pointer',
+    fontSize: '0.7rem', textTransform: 'capitalize' as const,
+  },
+  fitBtnActive: {
+    padding: '3px 7px', background: '#1a2a3a', color: '#c9a84c',
+    border: '1px solid #c9a84c', borderRadius: 4, cursor: 'pointer',
+    fontSize: '0.7rem', textTransform: 'capitalize' as const,
+  },
+  badge: {
+    fontSize: '0.75rem', color: '#999', background: '#2a2a4a',
+    padding: '2px 8px', borderRadius: 12,
+  },
+  muted: { color: '#666', fontStyle: 'italic' },
+  btnPrimary: {
+    padding: '8px 16px', background: '#c9a84c', color: '#1a1a2e',
+    border: 'none', borderRadius: 4, cursor: 'pointer', fontWeight: 600,
+    fontSize: '0.875rem',
+  },
+  btnSecondary: {
+    padding: '8px 16px', background: 'transparent', color: '#c9a84c',
+    border: '1px solid #c9a84c', borderRadius: 4, cursor: 'pointer',
+    fontSize: '0.875rem',
+  },
+  btnGhost: {
+    padding: '6px 12px', background: 'transparent', color: '#666',
+    border: '1px solid #444', borderRadius: 4, cursor: 'pointer', fontSize: '0.875rem',
+  },
+  editInput: {
+    background: '#1a1a2e', border: '1px solid #3a3a5a', borderRadius: 4,
+    color: '#e0e0e0', padding: '6px 10px',
+  },
+  btnDanger: {
+    padding: '8px 16px', background: 'transparent', color: '#ef5350',
+    border: '1px solid #ef5350', borderRadius: 4, cursor: 'pointer',
+    fontSize: '0.875rem',
+  },
+  btnActive: {
+    padding: '8px 16px', background: '#2d4a2d', color: '#4caf50',
+    border: '1px solid #3d6a3d', borderRadius: 4, cursor: 'pointer',
+    fontSize: '0.875rem', fontWeight: 600,
+  },
+  btnSecondarySmall: {
+    padding: '5px 10px', background: 'transparent', color: '#c9a84c',
+    border: '1px solid #c9a84c', borderRadius: 4, cursor: 'pointer',
+    fontSize: '0.8rem',
+  },
+  btnIcon: {
+    padding: '4px 8px', background: 'transparent', color: '#888',
+    border: '1px solid #444', borderRadius: 4, cursor: 'pointer',
+    fontSize: '0.75rem',
+  },
+  btnRun: {
+    padding: '5px 12px', background: '#2d4a2d', color: '#4caf50',
+    border: '1px solid #3d6a3d', borderRadius: 4, cursor: 'pointer',
+    fontSize: '0.8rem', fontWeight: 600, textDecoration: 'none',
+  },
+  combatantRow: {
+    display: 'flex', alignItems: 'center', gap: 8,
+    padding: '6px 8px', background: '#1a1a2e',
+    borderRadius: 4, marginBottom: 4,
+  },
+  colorDot: {
+    width: 10, height: 10, borderRadius: '50%', flexShrink: 0,
+  },
+  combatantName: { flex: 1, fontSize: '0.95rem' },
+  combatantStat: { fontSize: '0.8rem', color: '#888', whiteSpace: 'nowrap' },
+  typeBadge: {
+    fontSize: '0.7rem', padding: '1px 6px', borderRadius: 10,
+    border: '1px solid', textTransform: 'capitalize' as const, flexShrink: 0,
+  },
+  formRow: { display: 'flex', gap: 8, alignItems: 'flex-end', flexWrap: 'wrap' as const },
+  formLabel: { display: 'flex', flexDirection: 'column' as const, gap: 4, fontSize: '0.75rem', color: '#888' },
+  memberChip: {
+    fontSize: '0.75rem', padding: '2px 8px', borderRadius: 10,
+    background: '#2a1a3a', color: '#ce93d8', border: '1px solid #4a2a5a',
+  },
+};

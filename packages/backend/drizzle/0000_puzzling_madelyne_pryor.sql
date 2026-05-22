@@ -1,0 +1,74 @@
+CREATE TABLE `adventures` (
+	`id` integer PRIMARY KEY AUTOINCREMENT NOT NULL,
+	`name` text NOT NULL,
+	`description` text,
+	`show_hp` integer DEFAULT 0 NOT NULL,
+	`show_initiative` integer DEFAULT 0 NOT NULL,
+	`created_at` text NOT NULL,
+	`updated_at` text NOT NULL
+);
+--> statement-breakpoint
+CREATE TABLE `combatants` (
+	`id` integer PRIMARY KEY AUTOINCREMENT NOT NULL,
+	`encounter_id` integer NOT NULL,
+	`name` text NOT NULL,
+	`max_hp` integer NOT NULL,
+	`initiative_modifier` integer DEFAULT 0 NOT NULL,
+	`type` text DEFAULT 'enemy' NOT NULL,
+	`color` text,
+	`description` text,
+	`visible_to_players` integer DEFAULT 1 NOT NULL,
+	FOREIGN KEY (`encounter_id`) REFERENCES `encounters`(`id`) ON UPDATE no action ON DELETE cascade
+);
+--> statement-breakpoint
+CREATE TABLE `encounters` (
+	`id` integer PRIMARY KEY AUTOINCREMENT NOT NULL,
+	`adventure_id` integer NOT NULL,
+	`name` text NOT NULL,
+	`description` text,
+	FOREIGN KEY (`adventure_id`) REFERENCES `adventures`(`id`) ON UPDATE no action ON DELETE cascade
+);
+--> statement-breakpoint
+CREATE TABLE `image_scenes` (
+	`id` integer PRIMARY KEY AUTOINCREMENT NOT NULL,
+	`adventure_id` integer NOT NULL,
+	`name` text NOT NULL,
+	`sort_order` integer DEFAULT 0 NOT NULL,
+	FOREIGN KEY (`adventure_id`) REFERENCES `adventures`(`id`) ON UPDATE no action ON DELETE cascade
+);
+--> statement-breakpoint
+CREATE TABLE `scene_images` (
+	`id` integer PRIMARY KEY AUTOINCREMENT NOT NULL,
+	`scene_id` integer NOT NULL,
+	`file_path` text NOT NULL,
+	`sort_order` integer DEFAULT 0 NOT NULL,
+	`fit` text DEFAULT 'fit' NOT NULL,
+	FOREIGN KEY (`scene_id`) REFERENCES `image_scenes`(`id`) ON UPDATE no action ON DELETE cascade
+);
+--> statement-breakpoint
+CREATE TABLE `adventure_players` (
+	`id` integer PRIMARY KEY AUTOINCREMENT NOT NULL,
+	`adventure_id` integer NOT NULL,
+	`name` text NOT NULL,
+	`max_hp` integer DEFAULT 10 NOT NULL,
+	`initiative_modifier` integer DEFAULT 0 NOT NULL,
+	`color` text,
+	FOREIGN KEY (`adventure_id`) REFERENCES `adventures`(`id`) ON UPDATE no action ON DELETE cascade
+);
+--> statement-breakpoint
+CREATE TABLE `sessions` (
+	`id` integer PRIMARY KEY AUTOINCREMENT NOT NULL,
+	`adventure_id` integer NOT NULL,
+	`name` text NOT NULL,
+	`date` text NOT NULL,
+	`notes` text,
+	FOREIGN KEY (`adventure_id`) REFERENCES `adventures`(`id`) ON UPDATE no action ON DELETE cascade
+);
+--> statement-breakpoint
+CREATE TABLE `group_members` (
+	`id` integer PRIMARY KEY AUTOINCREMENT NOT NULL,
+	`combatant_id` integer NOT NULL,
+	`label` text NOT NULL,
+	`max_hp` integer DEFAULT 10 NOT NULL,
+	FOREIGN KEY (`combatant_id`) REFERENCES `combatants`(`id`) ON UPDATE no action ON DELETE cascade
+);

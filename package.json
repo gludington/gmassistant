@@ -1,0 +1,16 @@
+{
+  "name": "gmassisstant",
+  "private": true,
+  "scripts": {
+    "dev": "concurrently -n backend,frontend -c blue,green \"pnpm --filter @gmassisstant/backend dev\" \"pnpm --filter @gmassisstant/frontend dev\"",
+    "build": "pnpm --filter @gmassisstant/types build && pnpm --filter @gmassisstant/backend build && pnpm --filter @gmassisstant/frontend build",
+    "db:generate": "pnpm --filter @gmassisstant/backend db:generate",
+    "db:migrate": "pnpm --filter @gmassisstant/backend db:migrate"
+  },
+  "devDependencies": {
+    "concurrently": "^9.0.0"
+  },
+  "pnpm": {
+    "onlyBuiltDependencies": ["esbuild"]
+  }
+}
