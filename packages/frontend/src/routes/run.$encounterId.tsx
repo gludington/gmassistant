@@ -18,6 +18,10 @@ interface BaseCombatant {
   description?: string | null;
   visibleToPlayers?: boolean;
   isAdventurePlayer?: boolean;
+  armorClass?: number | null;
+  spellDc?: number | null;
+  passivePerception?: number | null;
+  statBlock?: string | null;
   members?: { id: number; label: string; maxHp: number }[];
 }
 
@@ -38,6 +42,12 @@ interface RunCombatant extends LiveCombatant {
   description: string | null;
   editingHp: boolean;
   editingInit: boolean;
+  armorClass?: number | null;
+  spellDc?: number | null;
+  passivePerception?: number | null;
+  statBlock?: string | null;
+  legendaryActionsMax?: number;
+  legendaryActionsRemaining?: number;
   members?: { id: number; label: string; currentHp: number; maxHp: number; conditions: string[] }[];
 }
 
@@ -76,6 +86,14 @@ function toRunCombatant(c: BaseCombatant): RunCombatant {
     };
   }
   const isGmOnly = c.type === 'event' || c.type === 'lair';
+  let legendaryActionsMax: number | undefined;
+  if (c.statBlock) {
+    try {
+      const sb = JSON.parse(c.statBlock);
+      const hasLegendary = (sb.actions ?? []).some((a: { action_type?: string }) => a.action_type === 'LEGENDARY_ACTION');
+      if (hasLegendary) legendaryActionsMax = 3;
+    } catch {}
+  }
   return {
     id: c.id,
     name: c.name,
@@ -91,6 +109,12 @@ function toRunCombatant(c: BaseCombatant): RunCombatant {
     description: c.description ?? null,
     editingHp: false,
     editingInit: false,
+    armorClass: c.armorClass ?? null,
+    spellDc: c.spellDc ?? null,
+    passivePerception: c.passivePerception ?? null,
+    statBlock: c.statBlock ?? null,
+    legendaryActionsMax,
+    legendaryActionsRemaining: legendaryActionsMax,
   };
 }
 
@@ -143,6 +167,7 @@ function EncounterRunner() {
   const [showAddForm, setShowAddForm] = useState(false);
   const [activeCombatantId, setActiveCombatantId] = useState<number | null>(null);
   const [round, setRound] = useState(1);
+  const [statBlockCombatant, setStatBlockCombatant] = useState<RunCombatant | null>(null);
   const tempIdRef = useRef(-100000);
 
   useEffect(() => { send({ type: 'CLEAR_IMAGE' }); }, []);
@@ -284,7 +309,13 @@ function EncounterRunner() {
     if (roundDelta !== 0) setRound(newRound);
     const nextId = sorted[nextIdx].id;
     setActiveCombatantId(nextId);
-    broadcast(combatants, showOnPlayer, showHp, showInitiative, nextId, newRound);
+    const nextCombatants = combatants.map((c) =>
+      c.id === nextId && c.legendaryActionsMax != null
+        ? { ...c, legendaryActionsRemaining: c.legendaryActionsMax }
+        : c
+    );
+    if (nextCombatants !== combatants) setCombatants(nextCombatants);
+    broadcast(nextCombatants, showOnPlayer, showHp, showInitiative, nextId, newRound);
   }
 
   function activateCombatant(id: number) {
@@ -310,7 +341,7 @@ function EncounterRunner() {
     if (!onlyEditToggle && showOnPlayer) broadcast(next, true);
   }
 
-  function addCombatant(values: { name: string; maxHp: number; initiativeModifier: number; type: RunCombatant['type']; color: string; description: string | null; visibleToPlayers: boolean; initiative: number | null; members?: { label: string; maxHp: number }[] }) {
+  function addCombatant(values: { name: string; maxHp: number; initiativeModifier: number; type: RunCombatant['type']; color: string; description: string | null; visibleToPlayers: boolean; initiative: number | null; statBlock?: string; members?: { label: string; maxHp: number }[] }) {
     let newCombatant: RunCombatant;
     if (values.type === 'group' && values.members && values.members.length > 0) {
       const members = values.members.map((m) => ({
@@ -354,6 +385,7 @@ function EncounterRunner() {
         description: values.description,
         editingHp: false,
         editingInit: false,
+        statBlock: values.statBlock ?? null,
       };
     }
     const next = [...combatants, newCombatant];
@@ -518,11 +550,17 @@ function EncounterRunner() {
               onUpdateBase={(values) => updateCombatantBase(c.id, values)}
               onToggleVisible={() => toggleVisibility(c.id)}
               onSetActive={() => activateCombatant(c.id)}
+              onShowStatBlock={c.statBlock ? () => setStatBlockCombatant(c) : undefined}
             />
           ))}
-
         </div>
       </main>
+      {statBlockCombatant && (
+        <StatBlockPanel
+          combatant={statBlockCombatant}
+          onClose={() => setStatBlockCombatant(null)}
+        />
+      )}
     </div>
   );
 }
@@ -538,6 +576,7 @@ function CombatantRow({
   onUpdateBase,
   onToggleVisible,
   onSetActive,
+  onShowStatBlock,
 }: {
   combatant: RunCombatant;
   isActive: boolean;
@@ -547,6 +586,7 @@ function CombatantRow({
   onUpdateBase: (values: { name: string; maxHp: number; initiativeModifier: number; type: RunCombatant['type']; color: string }) => void;
   onToggleVisible: () => void;
   onSetActive: () => void;
+  onShowStatBlock?: () => void;
 }) {
   const [editingBase, setEditingBase] = useState(false);
   const [showCondPicker, setShowCondPicker] = useState(false);
@@ -665,6 +705,13 @@ function CombatantRow({
         >▶</button>
         <span style={dead ? s.deadName : s.name}>{c.name}</span>
         <span style={{ ...s.typeBadge, ...typeStyle(c.type) }}>{c.type === 'lair' ? 'lair action' : c.type}</span>
+        {c.isAdventurePlayer && (
+          <>
+            {c.armorClass != null && <span style={s.pcStat} title="Armor Class">AC {c.armorClass}</span>}
+            {c.spellDc != null && <span style={s.pcStat} title="Spell Save DC">DC {c.spellDc}</span>}
+            {c.passivePerception != null && <span style={s.pcStat} title="Passive Perception">PP {c.passivePerception}</span>}
+          </>
+        )}
         {!isGroup && c.conditions.map((cond) => (
           <span key={cond} style={s.condBadge} title={cond} onClick={() => {
             const base = cond.replace(/\s+\d+$/, '');
@@ -687,6 +734,18 @@ function CombatantRow({
         )}
         {!c.isAdventurePlayer && !isGroup && (
           <button style={s.editBtn} onClick={() => setEditingBase((v) => !v)} title="Edit">✎</button>
+        )}
+        {onShowStatBlock && (
+          <button style={s.editBtn} onClick={onShowStatBlock} title="View stat block">📖</button>
+        )}
+        {c.legendaryActionsMax != null && (
+          <LegendaryWidget
+            max={c.legendaryActionsMax}
+            remaining={c.legendaryActionsRemaining ?? c.legendaryActionsMax}
+            onSpend={() => onUpdate({ legendaryActionsRemaining: Math.max(0, (c.legendaryActionsRemaining ?? c.legendaryActionsMax!) - 1) })}
+            onReset={() => onUpdate({ legendaryActionsRemaining: c.legendaryActionsMax })}
+            onSetMax={(n) => onUpdate({ legendaryActionsMax: n, legendaryActionsRemaining: n })}
+          />
         )}
       </div>
 
@@ -913,7 +972,7 @@ function AddCombatantForm({
   onCancel,
   initialValues,
 }: {
-  onSubmit: (v: { name: string; maxHp: number; initiativeModifier: number; type: RunCombatant['type']; color: string; description: string | null; visibleToPlayers: boolean; initiative: number | null; members?: { label: string; maxHp: number }[] }) => void;
+  onSubmit: (v: { name: string; maxHp: number; initiativeModifier: number; type: RunCombatant['type']; color: string; description: string | null; visibleToPlayers: boolean; initiative: number | null; statBlock?: string; members?: { label: string; maxHp: number }[] }) => void;
   onCancel: () => void;
   initialValues?: { name: string; maxHp: number; initiativeModifier: number; type: RunCombatant['type']; color: string; initiative: number | null };
 }) {
@@ -926,6 +985,7 @@ function AddCombatantForm({
   const [description, setDescription] = useState('');
   const [visibleToPlayers, setVisibleToPlayers] = useState(true);
   const [members, setMembers] = useState<{ label: string; maxHp: number }[]>([]);
+  const [pendingStatBlock, setPendingStatBlock] = useState<string | undefined>();
 
   function addMember() {
     setMembers((prev) => [...prev, { label: '', maxHp: 10 }]);
@@ -956,6 +1016,7 @@ function AddCombatantForm({
       description: description.trim() || null,
       visibleToPlayers: isGmOnly ? false : visibleToPlayers,
       initiative: initiative === '' ? null : Number(initiative),
+      statBlock: pendingStatBlock,
       ...(isGroup ? { members } : {}),
     });
   }
@@ -964,7 +1025,7 @@ function AddCombatantForm({
     <form style={s.addForm} onSubmit={handleSubmit}>
       <Open5eSearch
         style={{ marginBottom: 8 }}
-        onSelect={(m) => { setName(m.name); setMaxHp(m.maxHp); setInitMod(m.initiativeModifier); setType('enemy'); }}
+        onSelect={(m) => { setName(m.name); setMaxHp(m.maxHp); setInitMod(m.initiativeModifier); setType('enemy'); setPendingStatBlock(m.statBlock); }}
       />
       <div style={s.addFormRow}>
         <input style={{ ...s.addInput, flex: 2 }} placeholder="Name" value={name} onChange={(e) => setName(e.target.value)} autoFocus />
@@ -1037,6 +1098,246 @@ function AddCombatantForm({
   );
 }
 
+// ── LegendaryWidget ───────────────────────────────────────────────────────────
+
+function LegendaryWidget({ max, remaining, onSpend, onReset, onSetMax }: {
+  max: number; remaining: number;
+  onSpend: () => void; onReset: () => void; onSetMax: (n: number) => void;
+}) {
+  return (
+    <div style={lwWrap} title="Legendary actions">
+      <span style={lwLabel}>⚡</span>
+      {Array.from({ length: max }, (_, i) => (
+        <button
+          key={i}
+          style={{ ...lwPip, color: i < remaining ? '#ffd54f' : '#333', cursor: i < remaining ? 'pointer' : 'default' }}
+          onClick={i < remaining ? onSpend : undefined}
+          title={i < remaining ? 'Spend legendary action' : 'Spent'}
+        >●</button>
+      ))}
+      <button style={lwReset} onClick={onReset} title="Reset all">↺</button>
+      <button style={lwAdj} onClick={() => onSetMax(Math.max(1, max - 1))} title="Reduce max">−</button>
+      <button style={lwAdj} onClick={() => onSetMax(max + 1)} title="Increase max">+</button>
+    </div>
+  );
+}
+
+const lwWrap: React.CSSProperties = {
+  display: 'flex', alignItems: 'center', gap: 2,
+  background: '#1a1a0a', border: '1px solid #4a4a1e',
+  borderRadius: 4, padding: '2px 6px', flexShrink: 0,
+};
+const lwLabel: React.CSSProperties = { fontSize: '0.75rem', marginRight: 2 };
+const lwPip: React.CSSProperties = {
+  background: 'none', border: 'none', fontSize: '0.85rem',
+  padding: '0 1px', lineHeight: 1,
+};
+const lwReset: React.CSSProperties = {
+  background: 'none', border: 'none', color: '#888', cursor: 'pointer',
+  fontSize: '0.8rem', padding: '0 2px', lineHeight: 1, marginLeft: 2,
+};
+const lwAdj: React.CSSProperties = {
+  background: 'none', border: '1px solid #333', borderRadius: 3,
+  color: '#666', cursor: 'pointer', fontSize: '0.65rem',
+  padding: '0 3px', lineHeight: '1.4', marginLeft: 1,
+};
+
+// ── StatBlockPanel ────────────────────────────────────────────────────────────
+
+interface SBAction {
+  name: string;
+  desc: string;
+  action_type?: string;
+  legendary_action_cost?: number;
+  usage_limits?: { type: string; param?: number } | null;
+}
+interface StatBlockData {
+  name?: string;
+  size?: { name?: string };
+  type?: { name?: string };
+  alignment?: string;
+  armor_class?: number;
+  armor_detail?: string;
+  hit_points?: number;
+  hit_dice?: string;
+  challenge_rating?: number;
+  speed?: Record<string, number | boolean | string>;
+  ability_scores?: Record<string, number>;
+  modifiers?: Record<string, number>;
+  saving_throws?: Record<string, number>;
+  skill_bonuses?: Record<string, number>;
+  passive_perception?: number;
+  resistances_and_immunities?: {
+    damage_resistances_display?: string;
+    damage_immunities_display?: string;
+    damage_vulnerabilities_display?: string;
+    condition_immunities_display?: string;
+  };
+  darkvision_range?: number | null;
+  blindsight_range?: number | null;
+  tremorsense_range?: number | null;
+  truesight_range?: number | null;
+  languages?: { as_string?: string };
+  traits?: { name: string; desc: string }[];
+  actions?: SBAction[];
+}
+
+function fmod(n: number | undefined) {
+  if (n == null) return '—';
+  return n >= 0 ? `+${n}` : `${n}`;
+}
+
+function StatBlockPanel({ combatant, onClose }: { combatant: RunCombatant; onClose: () => void }) {
+  let sb: StatBlockData = {};
+  try { sb = JSON.parse(combatant.statBlock ?? '{}'); } catch {}
+
+  const typeName = sb.type?.name ?? '';
+  const sizeName = sb.size?.name ?? '';
+
+  const speedParts = sb.speed
+    ? Object.entries(sb.speed).filter(([k, v]) => k !== 'unit' && typeof v === 'number' && (v as number) > 0).map(([k, v]) => `${k} ${v}ft`)
+    : [];
+
+  const scores = sb.ability_scores ?? {};
+  const mods = sb.modifiers ?? {};
+  const saves = sb.saving_throws ?? {};
+  const skills = sb.skill_bonuses ?? {};
+
+  // Only show saves that differ from the base modifier (i.e. have proficiency)
+  const profSaves = Object.entries(saves).filter(([k, v]) => v !== mods[k]);
+
+  const ri = sb.resistances_and_immunities ?? {};
+
+  const senses: string[] = [];
+  if (sb.darkvision_range) senses.push(`Darkvision ${sb.darkvision_range}ft`);
+  if (sb.blindsight_range) senses.push(`Blindsight ${sb.blindsight_range}ft`);
+  if (sb.tremorsense_range) senses.push(`Tremorsense ${sb.tremorsense_range}ft`);
+  if (sb.truesight_range) senses.push(`Truesight ${sb.truesight_range}ft`);
+  if (sb.passive_perception != null) senses.push(`Passive Perception ${sb.passive_perception}`);
+
+  const allActions = sb.actions ?? [];
+  const actions = allActions.filter((a) => a.action_type === 'ACTION');
+  const bonusActions = allActions.filter((a) => a.action_type === 'BONUS_ACTION');
+  const reactions = allActions.filter((a) => a.action_type === 'REACTION');
+  const legendary = allActions.filter((a) => a.action_type === 'LEGENDARY_ACTION');
+
+  function actionLabel(a: SBAction) {
+    let label = a.name;
+    if (a.usage_limits?.type === 'RECHARGE_ON_ROLL' && a.usage_limits.param != null) {
+      label += ` (Recharge ${a.usage_limits.param}–6)`;
+    } else if (a.usage_limits?.type === 'PER_DAY' && a.usage_limits.param != null) {
+      label += ` (${a.usage_limits.param}/Day)`;
+    }
+    if (a.legendary_action_cost && a.legendary_action_cost > 1) {
+      label += ` (Costs ${a.legendary_action_cost})`;
+    }
+    return label;
+  }
+
+  function ActionBlock({ items, title }: { items: SBAction[]; title: string }) {
+    if (items.length === 0) return null;
+    return (
+      <div style={sbSection}>
+        <div style={sbSectionTitle}>{title}</div>
+        {items.map((a) => (
+          <p key={a.name} style={sbAction}>
+            <strong style={{ color: '#e0e0e0' }}>{actionLabel(a)}.</strong>{' '}
+            <span style={{ color: '#bbb' }}>{a.desc}</span>
+          </p>
+        ))}
+      </div>
+    );
+  }
+
+  return (
+    <div style={sbOverlay} onClick={onClose}>
+      <div style={sbDrawer} onClick={(e) => e.stopPropagation()}>
+        <div style={sbHeader}>
+          <div>
+            <div style={sbName}>{sb.name ?? combatant.name}</div>
+            <div style={sbSubtitle}>{[sizeName, typeName, sb.alignment].filter(Boolean).join(', ')}</div>
+          </div>
+          <button style={sbCloseBtn} onClick={onClose}>✕</button>
+        </div>
+
+        <div style={sbDivider} />
+
+        <div style={sbRow}>
+          {sb.armor_class != null && <span style={sbStat}><strong>AC</strong> {sb.armor_class}{sb.armor_detail ? ` (${sb.armor_detail})` : ''}</span>}
+          {sb.hit_points != null && <span style={sbStat}><strong>HP</strong> {sb.hit_points}{sb.hit_dice ? ` (${sb.hit_dice})` : ''}</span>}
+          {speedParts.length > 0 && <span style={sbStat}><strong>Speed</strong> {speedParts.join(', ')}</span>}
+          {sb.challenge_rating != null && <span style={sbStat}><strong>CR</strong> {sb.challenge_rating}</span>}
+        </div>
+
+        <div style={sbDivider} />
+
+        <div style={sbAbilityRow}>
+          {(['STR', 'DEX', 'CON', 'INT', 'WIS', 'CHA'] as const).map((label, i) => {
+            const key = ['strength', 'dexterity', 'constitution', 'intelligence', 'wisdom', 'charisma'][i];
+            return (
+              <div key={label} style={sbAbility}>
+                <div style={sbAbilityLabel}>{label}</div>
+                <div style={sbAbilityScore}>{scores[key] ?? '—'}</div>
+                <div style={sbAbilityMod}>{fmod(mods[key])}</div>
+              </div>
+            );
+          })}
+        </div>
+
+        <div style={sbDivider} />
+
+        <div style={sbInfoBlock}>
+          {profSaves.length > 0 && (
+            <div style={sbInfoLine}><strong>Saves</strong> {profSaves.map(([k, v]) => `${k.slice(0,3).toUpperCase()} ${fmod(v)}`).join(', ')}</div>
+          )}
+          {Object.keys(skills).length > 0 && (
+            <div style={sbInfoLine}><strong>Skills</strong> {Object.entries(skills).map(([k, v]) => `${k.charAt(0).toUpperCase() + k.slice(1).replace('_', ' ')} ${fmod(v)}`).join(', ')}</div>
+          )}
+          {ri.damage_vulnerabilities_display && <div style={{ ...sbInfoLine, color: '#ef9a9a' }}><strong>Vulnerabilities</strong> {ri.damage_vulnerabilities_display}</div>}
+          {ri.damage_resistances_display && <div style={{ ...sbInfoLine, color: '#80cbc4' }}><strong>Resistances</strong> {ri.damage_resistances_display}</div>}
+          {ri.damage_immunities_display && <div style={{ ...sbInfoLine, color: '#a5d6a7' }}><strong>Immunities</strong> {ri.damage_immunities_display}</div>}
+          {ri.condition_immunities_display && <div style={sbInfoLine}><strong>Condition Immunities</strong> {ri.condition_immunities_display}</div>}
+          {senses.length > 0 && <div style={sbInfoLine}><strong>Senses</strong> {senses.join(', ')}</div>}
+          {sb.languages?.as_string && <div style={sbInfoLine}><strong>Languages</strong> {sb.languages.as_string}</div>}
+        </div>
+
+        <ActionBlock items={sb.traits ?? []} title="Traits" />
+        <ActionBlock items={actions} title="Actions" />
+        <ActionBlock items={bonusActions} title="Bonus Actions" />
+        <ActionBlock items={reactions} title="Reactions" />
+        <ActionBlock items={legendary} title="Legendary Actions" />
+      </div>
+    </div>
+  );
+}
+
+const sbOverlay: React.CSSProperties = {
+  position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.6)', zIndex: 1000,
+  display: 'flex', justifyContent: 'flex-end',
+};
+const sbDrawer: React.CSSProperties = {
+  width: 420, maxWidth: '95vw', height: '100vh', overflowY: 'auto',
+  background: '#16213e', borderLeft: '1px solid #2a2a4a',
+  padding: '20px 24px', display: 'flex', flexDirection: 'column', gap: 0,
+};
+const sbHeader: React.CSSProperties = { display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 8 };
+const sbName: React.CSSProperties = { fontSize: '1.3rem', fontWeight: 700, color: '#c9a84c' };
+const sbSubtitle: React.CSSProperties = { fontSize: '0.8rem', color: '#888', fontStyle: 'italic', marginTop: 2 };
+const sbCloseBtn: React.CSSProperties = { background: 'none', border: '1px solid #444', borderRadius: 4, color: '#888', cursor: 'pointer', padding: '4px 8px', fontSize: '0.8rem', flexShrink: 0 };
+const sbDivider: React.CSSProperties = { borderBottom: '1px solid #8b3a1a', margin: '10px 0' };
+const sbRow: React.CSSProperties = { display: 'flex', gap: 16, flexWrap: 'wrap', marginBottom: 4 };
+const sbStat: React.CSSProperties = { fontSize: '0.85rem', color: '#ccc' };
+const sbAbilityRow: React.CSSProperties = { display: 'flex', gap: 0, justifyContent: 'space-between', margin: '4px 0' };
+const sbAbility: React.CSSProperties = { display: 'flex', flexDirection: 'column', alignItems: 'center', flex: 1 };
+const sbAbilityLabel: React.CSSProperties = { fontSize: '0.7rem', color: '#c9a84c', fontWeight: 700, letterSpacing: '0.05em' };
+const sbAbilityScore: React.CSSProperties = { fontSize: '1rem', fontWeight: 600, color: '#e0e0e0' };
+const sbAbilityMod: React.CSSProperties = { fontSize: '0.75rem', color: '#aaa' };
+const sbInfoBlock: React.CSSProperties = { display: 'flex', flexDirection: 'column', gap: 3, marginBottom: 8 };
+const sbInfoLine: React.CSSProperties = { fontSize: '0.8rem', color: '#ccc', lineHeight: 1.5 };
+const sbSection: React.CSSProperties = { marginTop: 10 };
+const sbSectionTitle: React.CSSProperties = { fontSize: '0.75rem', fontWeight: 700, color: '#c9a84c', letterSpacing: '0.1em', textTransform: 'uppercase', borderBottom: '1px solid #8b3a1a', paddingBottom: 4, marginBottom: 6 };
+const sbAction: React.CSSProperties = { fontSize: '0.8rem', margin: '0 0 6px', lineHeight: 1.5 };
+
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
 function hpColor(pct: number) {
@@ -1085,7 +1386,7 @@ const s: Record<string, React.CSSProperties> = {
     fontSize: '0.9rem', color: '#c9a84c', fontWeight: 600,
     minWidth: 120, textAlign: 'center' as const,
   },
-  main: { padding: '24px 32px', maxWidth: 960, margin: '0 auto' },
+  main: { padding: '24px 32px', maxWidth: 1400, margin: '0 auto' },
   muted: { color: '#666', fontStyle: 'italic' },
 
   table: { display: 'flex', flexDirection: 'column', gap: 6 },
@@ -1122,16 +1423,20 @@ const s: Record<string, React.CSSProperties> = {
     color: '#666', fontSize: '1rem', padding: '0 2px', lineHeight: 1,
   },
   // Name cell
-  nameCell: { flex: 1, display: 'flex', alignItems: 'center', gap: 8, minWidth: 140 },
+  nameCell: { flex: 2, display: 'flex', alignItems: 'center', gap: 8, minWidth: 200, flexWrap: 'wrap' as const },
   name: { fontSize: '1rem', fontWeight: 500 },
   deadName: { fontSize: '1rem', fontWeight: 500, textDecoration: 'line-through', color: '#555' },
   typeBadge: {
     fontSize: '0.65rem', padding: '1px 6px', borderRadius: 10,
     border: '1px solid', textTransform: 'capitalize' as const, flexShrink: 0,
   },
+  pcStat: {
+    fontSize: '0.7rem', color: '#90caf9', background: '#1a2a3a',
+    border: '1px solid #1e3a5a', borderRadius: 4, padding: '1px 6px', flexShrink: 0,
+  },
 
   // HP cell
-  hpCell: { display: 'flex', flexDirection: 'column', gap: 4, minWidth: 320 },
+  hpCell: { display: 'flex', flexDirection: 'column', gap: 4, minWidth: 380, flex: 3 },
   hpBarTrack: {
     height: 4, background: '#2a2a4a', borderRadius: 2, overflow: 'hidden',
   },

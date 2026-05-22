@@ -18,6 +18,7 @@ CREATE TABLE `combatants` (
 	`color` text,
 	`description` text,
 	`visible_to_players` integer DEFAULT 1 NOT NULL,
+	`stat_block` text,
 	FOREIGN KEY (`encounter_id`) REFERENCES `encounters`(`id`) ON UPDATE no action ON DELETE cascade
 );
 --> statement-breakpoint
@@ -53,6 +54,9 @@ CREATE TABLE `adventure_players` (
 	`max_hp` integer DEFAULT 10 NOT NULL,
 	`initiative_modifier` integer DEFAULT 0 NOT NULL,
 	`color` text,
+	`armor_class` integer,
+	`spell_dc` integer,
+	`passive_perception` integer,
 	FOREIGN KEY (`adventure_id`) REFERENCES `adventures`(`id`) ON UPDATE no action ON DELETE cascade
 );
 --> statement-breakpoint

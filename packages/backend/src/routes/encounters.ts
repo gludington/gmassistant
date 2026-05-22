@@ -44,6 +44,9 @@ router.get('/:id', async (c) => {
     initiativeModifier: p.initiativeModifier,
     type: 'pc' as const,
     color: p.color,
+    armorClass: p.armorClass,
+    spellDc: p.spellDc,
+    passivePerception: p.passivePerception,
     isAdventurePlayer: true,
   }));
   return c.json({ ...encounter, showHp: adventure?.showHp ?? false, showInitiative: adventure?.showInitiative ?? false, combatants: [...playerCombatants, ...combatantListWithMembers] });
@@ -93,6 +96,7 @@ const combatantSchema = z.object({
   color: z.string().optional().nullable(),
   description: z.string().optional().nullable(),
   visibleToPlayers: z.boolean().optional().default(true),
+  statBlock: z.string().optional().nullable(),
   members: z.array(z.object({ label: z.string().min(1), maxHp: z.number().int().min(1) })).optional(),
 });
 
@@ -114,6 +118,7 @@ router.post('/combatants', zValidator('json', combatantSchema), async (c) => {
     color: data.color ?? null,
     description: data.description ?? null,
     visibleToPlayers: data.visibleToPlayers ?? true,
+    statBlock: data.statBlock ?? null,
   }).returning();
 
   if (data.type === 'group' && data.members && data.members.length > 0) {
@@ -132,7 +137,7 @@ router.put('/combatants/:id', zValidator('json', combatantSchema.partial().omit(
   const data = c.req.valid('json');
   const { members, ...fields } = data;
   const [updated] = await db.update(combatants)
-    .set({ ...fields, color: fields.color ?? null, description: fields.description ?? null, visibleToPlayers: fields.visibleToPlayers ?? true })
+    .set({ ...fields, color: fields.color ?? null, description: fields.description ?? null, visibleToPlayers: fields.visibleToPlayers ?? true, statBlock: fields.statBlock ?? null })
     .where(eq(combatants.id, id))
     .returning();
   if (!updated) return c.json({ error: 'Not found' }, 404);

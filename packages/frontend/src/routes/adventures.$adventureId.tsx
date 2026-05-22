@@ -16,6 +16,7 @@ interface Combatant {
   color: string | null;
   description: string | null;
   visibleToPlayers: boolean;
+  statBlock?: string | null;
   members?: { id: number; label: string; maxHp: number }[];
 }
 
@@ -48,6 +49,9 @@ interface Player {
   maxHp: number;
   initiativeModifier: number;
   color: string | null;
+  armorClass: number | null;
+  spellDc: number | null;
+  passivePerception: number | null;
 }
 
 interface AdventureDetail {
@@ -187,7 +191,7 @@ function AdventureDetailPage() {
   });
 
   const addPlayer = useMutation({
-    mutationFn: async (body: { name: string; maxHp: number; initiativeModifier: number; color: string }) => {
+    mutationFn: async (body: { name: string; maxHp: number; initiativeModifier: number; color: string; armorClass: number | null; spellDc: number | null; passivePerception: number | null }) => {
       const res = await fetch('/api/adventures/players', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -222,11 +226,11 @@ function AdventureDetailPage() {
   }
 
   const updatePlayer = useMutation({
-    mutationFn: async (body: { id: number; name: string; maxHp: number; initiativeModifier: number; color: string }) => {
+    mutationFn: async (body: { id: number; name: string; maxHp: number; initiativeModifier: number; color: string; armorClass: number | null; spellDc: number | null; passivePerception: number | null }) => {
       const res = await fetch(`/api/adventures/players/${body.id}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ name: body.name, maxHp: body.maxHp, initiativeModifier: body.initiativeModifier, color: body.color }),
+        body: JSON.stringify({ name: body.name, maxHp: body.maxHp, initiativeModifier: body.initiativeModifier, color: body.color, armorClass: body.armorClass, spellDc: body.spellDc, passivePerception: body.passivePerception }),
       });
       if (!res.ok) throw new Error('Failed to update player');
     },
@@ -326,14 +330,16 @@ function AdventureDetailPage() {
                 pending={updatePlayer.isPending}
                 onCancel={() => setEditingPlayerId(null)}
               />
+
             ) : (
               <div key={p.id} style={s.combatantRow}>
                 {p.color && <span style={{ ...s.colorDot, background: p.color }} />}
                 <span style={s.combatantName}>{p.name}</span>
                 <span style={s.combatantStat}>HP {p.maxHp}</span>
-                <span style={s.combatantStat}>
-                  Init {p.initiativeModifier >= 0 ? `+${p.initiativeModifier}` : p.initiativeModifier}
-                </span>
+                <span style={s.combatantStat}>Init {p.initiativeModifier >= 0 ? `+${p.initiativeModifier}` : p.initiativeModifier}</span>
+                {p.armorClass != null && <span style={s.combatantStat}>AC {p.armorClass}</span>}
+                {p.spellDc != null && <span style={s.combatantStat}>DC {p.spellDc}</span>}
+                {p.passivePerception != null && <span style={s.combatantStat}>PP {p.passivePerception}</span>}
                 <span style={{ ...s.typeBadge, ...typeStyle('pc') }}>pc</span>
                 <button style={s.btnIcon} onClick={() => setEditingPlayerId(p.id)} title="Edit">✎</button>
                 <button style={s.btnIcon} onClick={() => deletePlayer.mutate(p.id)}>✕</button>
@@ -641,7 +647,7 @@ function CombatantManager({ encounter, onInvalidate }: { encounter: Encounter; o
   const send = useBroadcastSender();
 
   const addCombatant = useMutation({
-    mutationFn: async (body: { name: string; maxHp: number; initiativeModifier: number; type: Combatant['type']; color: string; description: string | null; visibleToPlayers: boolean; members?: { label: string; maxHp: number }[] }) => {
+    mutationFn: async (body: { name: string; maxHp: number; initiativeModifier: number; type: Combatant['type']; color: string; description: string | null; visibleToPlayers: boolean; statBlock?: string; members?: { label: string; maxHp: number }[] }) => {
       const res = await fetch('/api/encounters/combatants', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -653,7 +659,7 @@ function CombatantManager({ encounter, onInvalidate }: { encounter: Encounter; o
     onSuccess: (created) => {
       onInvalidate();
       setShowForm(false);
-      send({ type: 'COMBATANT_ADDED', payload: { encounterId: encounter.id, combatant: { id: created.id, name: created.name, maxHp: created.maxHp, initiativeModifier: created.initiativeModifier, type: created.type, color: created.color, description: created.description, visibleToPlayers: created.visibleToPlayers, ...(created.members ? { members: created.members } : {}) } } });
+      send({ type: 'COMBATANT_ADDED', payload: { encounterId: encounter.id, combatant: { id: created.id, name: created.name, maxHp: created.maxHp, initiativeModifier: created.initiativeModifier, type: created.type, color: created.color, description: created.description, visibleToPlayers: created.visibleToPlayers, statBlock: created.statBlock ?? null, ...(created.members ? { members: created.members } : {}) } } });
     },
   });
 
@@ -720,6 +726,21 @@ function CombatantManager({ encounter, onInvalidate }: { encounter: Encounter; o
                 title={c.visibleToPlayers ? 'Visible to players (click to hide)' : 'Hidden from players (click to show)'}
                 onClick={() => updateCombatant.mutate({ id: c.id, name: c.name, maxHp: c.maxHp, initiativeModifier: c.initiativeModifier, type: c.type, color: c.color ?? '#888888', description: c.description, visibleToPlayers: !c.visibleToPlayers })}
               >👁</button>
+              {(c.type === 'enemy' || c.type === 'group') && (
+                <button
+                  style={{ ...s.btnIcon, color: '#ce93d8' }}
+                  title={c.type === 'enemy' ? 'Convert to group with 2 members' : 'Add another member'}
+                  onClick={() => {
+                    if (c.type === 'enemy') {
+                      updateCombatant.mutate({ id: c.id, name: c.name, maxHp: c.maxHp, initiativeModifier: c.initiativeModifier, type: 'group', color: c.color ?? '#888888', description: c.description, visibleToPlayers: c.visibleToPlayers, members: [{ label: `${c.name} (1)`, maxHp: c.maxHp }, { label: `${c.name} (2)`, maxHp: c.maxHp }] });
+                    } else {
+                      const existing = c.members ?? [];
+                      const lastHp = existing.length > 0 ? existing[existing.length - 1].maxHp : 10;
+                      updateCombatant.mutate({ id: c.id, name: c.name, maxHp: c.maxHp, initiativeModifier: c.initiativeModifier, type: 'group', color: c.color ?? '#888888', description: c.description, visibleToPlayers: c.visibleToPlayers, members: [...existing.map(m => ({ label: m.label, maxHp: m.maxHp })), { label: `${c.name} (${existing.length + 1})`, maxHp: lastHp }] });
+                    }
+                  }}
+                >+</button>
+              )}
               <button style={s.btnIcon} onClick={() => setEditingId(c.id)} title="Edit">✎</button>
               <button style={s.btnIcon} onClick={() => removeCombatant.mutate(c.id)}>✕</button>
             </div>
@@ -756,7 +777,7 @@ function CombatantManager({ encounter, onInvalidate }: { encounter: Encounter; o
 function CombatantForm({
   onSubmit, pending, onCancel, initialValues,
 }: {
-  onSubmit: (v: { name: string; maxHp: number; initiativeModifier: number; type: Combatant['type']; color: string; description: string | null; visibleToPlayers: boolean; members?: { label: string; maxHp: number }[] }) => void;
+  onSubmit: (v: { name: string; maxHp: number; initiativeModifier: number; type: Combatant['type']; color: string; description: string | null; visibleToPlayers: boolean; statBlock?: string; members?: { label: string; maxHp: number }[] }) => void;
   pending: boolean;
   onCancel: () => void;
   initialValues?: { name: string; maxHp: number; initiativeModifier: number; type: Combatant['type']; color: string | null; description?: string | null; visibleToPlayers?: boolean; members?: { id: number; label: string; maxHp: number }[] };
@@ -773,6 +794,7 @@ function CombatantForm({
   const [members, setMembers] = useState<{ label: string; maxHp: number }[]>(
     initialValues?.members?.map((m) => ({ label: m.label, maxHp: m.maxHp })) ?? []
   );
+  const [pendingStatBlock, setPendingStatBlock] = useState<string | undefined>();
 
   function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -780,7 +802,7 @@ function CombatantForm({
     if (type === 'group' && members.length === 0) return;
     const computedMaxHp = type === 'group' ? members.reduce((s, m) => s + m.maxHp, 0) : maxHp;
     const isGmOnly = type === 'event' || type === 'lair';
-    onSubmit({ name: name.trim(), maxHp: computedMaxHp, initiativeModifier: initMod, type, color, description: description.trim() || null, visibleToPlayers: isGmOnly ? false : visibleToPlayers, ...(type === 'group' ? { members } : {}) });
+    onSubmit({ name: name.trim(), maxHp: computedMaxHp, initiativeModifier: initMod, type, color, description: description.trim() || null, visibleToPlayers: isGmOnly ? false : visibleToPlayers, statBlock: pendingStatBlock, ...(type === 'group' ? { members } : {}) });
   }
 
   function addMember() {
@@ -801,7 +823,7 @@ function CombatantForm({
     <form style={{ ...s.form, marginTop: 8 }} onSubmit={handleSubmit}>
       {!initialValues && (
         <Open5eSearch
-          onSelect={(m) => { setName(m.name); setMaxHp(m.maxHp); setInitMod(m.initiativeModifier); setType('enemy'); }}
+          onSelect={(m) => { setName(m.name); setMaxHp(m.maxHp); setInitMod(m.initiativeModifier); setType('enemy'); setPendingStatBlock(m.statBlock); }}
         />
       )}
       <div style={s.formRow}>
@@ -889,20 +911,28 @@ function CombatantForm({
 function PlayerForm({
   onSubmit, pending, onCancel, initialValues,
 }: {
-  onSubmit: (v: { name: string; maxHp: number; initiativeModifier: number; color: string }) => void;
+  onSubmit: (v: { name: string; maxHp: number; initiativeModifier: number; color: string; armorClass: number | null; spellDc: number | null; passivePerception: number | null }) => void;
   pending: boolean;
   onCancel: () => void;
-  initialValues?: { name: string; maxHp: number; initiativeModifier: number; color: string | null };
+  initialValues?: { name: string; maxHp: number; initiativeModifier: number; color: string | null; armorClass?: number | null; spellDc?: number | null; passivePerception?: number | null };
 }) {
   const [name, setName] = useState(initialValues?.name ?? '');
   const [maxHp, setMaxHp] = useState(initialValues?.maxHp ?? 10);
   const [initMod, setInitMod] = useState(initialValues?.initiativeModifier ?? 0);
   const [color, setColor] = useState(initialValues?.color ?? '#4caf50');
+  const [armorClass, setArmorClass] = useState(initialValues?.armorClass != null ? String(initialValues.armorClass) : '');
+  const [spellDc, setSpellDc] = useState(initialValues?.spellDc != null ? String(initialValues.spellDc) : '');
+  const [passivePerception, setPassivePerception] = useState(initialValues?.passivePerception != null ? String(initialValues.passivePerception) : '');
 
   function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     if (!name.trim()) return;
-    onSubmit({ name: name.trim(), maxHp, initiativeModifier: initMod, color });
+    onSubmit({
+      name: name.trim(), maxHp, initiativeModifier: initMod, color,
+      armorClass: armorClass !== '' ? Number(armorClass) : null,
+      spellDc: spellDc !== '' ? Number(spellDc) : null,
+      passivePerception: passivePerception !== '' ? Number(passivePerception) : null,
+    });
   }
 
   return (
@@ -920,6 +950,20 @@ function PlayerForm({
         <label style={s.formLabel}>
           Color
           <input type="color" value={color} onChange={(e) => setColor(e.target.value)} style={{ width: 40, height: 32, border: 'none', background: 'none', cursor: 'pointer' }} />
+        </label>
+      </div>
+      <div style={s.formRow}>
+        <label style={s.formLabel}>
+          Armor Class
+          <input style={{ ...s.input, width: 72 }} type="number" min={1} placeholder="—" value={armorClass} onChange={(e) => setArmorClass(e.target.value)} />
+        </label>
+        <label style={s.formLabel}>
+          Spell DC
+          <input style={{ ...s.input, width: 72 }} type="number" min={1} placeholder="—" value={spellDc} onChange={(e) => setSpellDc(e.target.value)} />
+        </label>
+        <label style={s.formLabel}>
+          Passive Perception
+          <input style={{ ...s.input, width: 80 }} type="number" min={1} placeholder="—" value={passivePerception} onChange={(e) => setPassivePerception(e.target.value)} />
         </label>
       </div>
       <div style={{ display: 'flex', gap: 8 }}>

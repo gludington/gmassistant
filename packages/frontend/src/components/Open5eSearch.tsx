@@ -20,6 +20,7 @@ export interface MonsterImport {
   maxHp: number;
   initiativeModifier: number;
   type: 'enemy';
+  statBlock?: string;
 }
 
 interface Props {
@@ -60,12 +61,18 @@ export function Open5eSearch({ onSelect, style }: Props) {
     return () => clearTimeout(t);
   }, [query]);
 
-  function pick(m: MonsterHit) {
+  async function pick(m: MonsterHit) {
+    let statBlock: string | undefined;
+    try {
+      const res = await fetch(`https://api.open5e.com/v2/creatures/${m.key}/`);
+      if (res.ok) statBlock = await res.text();
+    } catch {}
     onSelect({
       name: m.name,
       maxHp: m.hit_points,
       initiativeModifier: m.initiative_bonus ?? 0,
       type: 'enemy',
+      statBlock,
     });
     setOpen(false);
     setQuery('');

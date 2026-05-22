@@ -50,6 +50,7 @@ export const combatants = sqliteTable('combatants', {
   color: text('color'),
   description: text('description'),
   visibleToPlayers: integer('visible_to_players', { mode: 'boolean' }).notNull().default(true),
+  statBlock: text('stat_block'),
 });
 
 export const groupMembers = sqliteTable('group_members', {
@@ -70,6 +71,9 @@ export const adventurePlayers = sqliteTable('adventure_players', {
   maxHp: integer('max_hp').notNull().default(10),
   initiativeModifier: integer('initiative_modifier').notNull().default(0),
   color: text('color'),
+  armorClass: integer('armor_class'),
+  spellDc: integer('spell_dc'),
+  passivePerception: integer('passive_perception'),
 });
 
 export const sessions = sqliteTable('sessions', {

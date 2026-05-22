@@ -158,6 +158,9 @@ const playerSchema = z.object({
   maxHp: z.number().int().min(1).default(10),
   initiativeModifier: z.number().int().default(0),
   color: z.string().optional().nullable(),
+  armorClass: z.number().int().optional().nullable(),
+  spellDc: z.number().int().optional().nullable(),
+  passivePerception: z.number().int().optional().nullable(),
 });
 
 router.post('/players', zValidator('json', playerSchema), async (c) => {
@@ -165,6 +168,9 @@ router.post('/players', zValidator('json', playerSchema), async (c) => {
   const [created] = await db.insert(adventurePlayers).values({
     ...data,
     color: data.color ?? null,
+    armorClass: data.armorClass ?? null,
+    spellDc: data.spellDc ?? null,
+    passivePerception: data.passivePerception ?? null,
   }).returning();
   return c.json(created, 201);
 });
@@ -173,7 +179,7 @@ router.put('/players/:id', zValidator('json', playerSchema.partial().omit({ adve
   const id = Number(c.req.param('id'));
   const data = c.req.valid('json');
   const [updated] = await db.update(adventurePlayers)
-    .set({ ...data, color: data.color ?? null })
+    .set({ ...data, color: data.color ?? null, armorClass: data.armorClass ?? null, spellDc: data.spellDc ?? null, passivePerception: data.passivePerception ?? null })
     .where(eq(adventurePlayers.id, id))
     .returning();
   if (!updated) return c.json({ error: 'Not found' }, 404);

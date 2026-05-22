@@ -94,5 +94,5 @@ export type BroadcastMessage =
   | { type: 'SET_SHOW_HP'; payload: { showHp: boolean } }
   | { type: 'SET_SHOW_INITIATIVE'; payload: { showInitiative: boolean } }
   | { type: 'COMBATANT_UPDATED'; payload: { encounterId: number; combatant: { id: number; name: string; maxHp: number; initiativeModifier: number; type: CombatantType; color: string | null; members?: { id: number; label: string; maxHp: number }[] } } }
-  | { type: 'COMBATANT_ADDED'; payload: { encounterId: number; combatant: { id: number; name: string; maxHp: number; initiativeModifier: number; type: CombatantType; color: string | null; description: string | null; visibleToPlayers: boolean; members?: { id: number; label: string; maxHp: number }[] } } }
+  | { type: 'COMBATANT_ADDED'; payload: { encounterId: number; combatant: { id: number; name: string; maxHp: number; initiativeModifier: number; type: CombatantType; color: string | null; description: string | null; visibleToPlayers: boolean; statBlock?: string | null; members?: { id: number; label: string; maxHp: number }[] } } }
   | { type: 'COMBATANT_REMOVED'; payload: { encounterId: number; combatantId: number } };
