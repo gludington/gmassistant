@@ -5,6 +5,7 @@ import type { LiveCombatant } from '@gmassisstant/types';
 import { useBroadcastSender, useBroadcastReceiver } from '../hooks/useBroadcast';
 import { CONDITIONS, conditionIcon } from '../conditions';
 import { Open5eSearch } from '../components/Open5eSearch';
+import { useAudio } from '../hooks/useAudio';
 
 // ── Types ────────────────────────────────────────────────────────────────────
 
@@ -32,6 +33,7 @@ interface EncounterData {
   description: string | null;
   showHp: boolean;
   showInitiative: boolean;
+  playlistId: number | null;
   combatants: BaseCombatant[];
 }
 
@@ -166,6 +168,7 @@ function sortCombatants(list: RunCombatant[]): RunCombatant[] {
 function EncounterRunner() {
   const { encounterId } = Route.useParams();
   const send = useBroadcastSender();
+  const { playPlaylist } = useAudio();
   const [combatants, setCombatants] = useState<RunCombatant[]>([]);
   const [showOnPlayer, setShowOnPlayer] = useState(() => {
     try {
@@ -204,6 +207,16 @@ function EncounterRunner() {
       // Always broadcast on load so the player screen reflects this encounter.
       // If showOnPlayer is true the tracker stays visible; if false it hides.
       broadcast(newCombatants, showOnPlayer, encounter.showHp, encounter.showInitiative);
+
+      if (encounter.playlistId) {
+        fetch(`/api/playlists?adventureId=${encounter.adventureId}`)
+          .then((r) => r.json())
+          .then((pls: { id: number; name: string; sortOrder: number; adventureId: number; tracks: { id: number; playlistId: number; name: string; type: 'file' | 'youtube'; url: string; sortOrder: number }[] }[]) => {
+            const pl = pls.find((p) => p.id === encounter.playlistId);
+            if (pl && pl.tracks.length > 0) playPlaylist(pl);
+          })
+          .catch(() => {});
+      }
     }
   }, [encounter, initialized]);
 
@@ -1434,7 +1447,7 @@ function typeStyle(type: RunCombatant['type']): React.CSSProperties {
 // ── Styles ────────────────────────────────────────────────────────────────────
 
 const s: Record<string, React.CSSProperties> = {
-  page: { minHeight: '100vh', background: '#1a1a2e', color: '#e0e0e0' },
+  page: { minHeight: '100vh', background: '#1a1a2e', color: '#e0e0e0', paddingBottom: 60 },
   header: {
     padding: '16px 32px', borderBottom: '1px solid #2a2a4a',
     background: '#16213e', display: 'flex', alignItems: 'center', gap: 16,

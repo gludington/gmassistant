@@ -49,7 +49,7 @@ router.get('/:id', async (c) => {
     passivePerception: p.passivePerception,
     isAdventurePlayer: true,
   }));
-  return c.json({ ...encounter, showHp: adventure?.showHp ?? false, showInitiative: adventure?.showInitiative ?? false, combatants: [...playerCombatants, ...combatantListWithMembers] });
+  return c.json({ ...encounter, showHp: adventure?.showHp ?? false, showInitiative: adventure?.showInitiative ?? false, combatants: [...playerCombatants, ...combatantListWithMembers], playlistId: encounter.playlistId ?? null });
 });
 
 const encounterSchema = z.object({
@@ -75,6 +75,14 @@ router.put('/:id', zValidator('json', encounterSchema.partial().omit({ adventure
     .set({ name: data.name, description: data.description ?? null })
     .where(eq(encounters.id, id))
     .returning();
+  if (!updated) return c.json({ error: 'Not found' }, 404);
+  return c.json(updated);
+});
+
+router.patch('/:id', zValidator('json', z.object({ playlistId: z.number().int().nullable() })), async (c) => {
+  const id = Number(c.req.param('id'));
+  const { playlistId } = c.req.valid('json');
+  const [updated] = await db.update(encounters).set({ playlistId }).where(eq(encounters.id, id)).returning();
   if (!updated) return c.json({ error: 'Not found' }, 404);
   return c.json(updated);
 });

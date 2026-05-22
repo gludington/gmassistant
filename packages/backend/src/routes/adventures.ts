@@ -3,7 +3,7 @@ import { zValidator } from '@hono/zod-validator';
 import { z } from 'zod';
 import { eq, inArray } from 'drizzle-orm';
 import { db } from '../db/index.js';
-import { adventures, imageScenes, sceneImages, encounters, combatants, adventurePlayers, groupMembers } from '../db/schema.js';
+import { adventures, imageScenes, sceneImages, encounters, combatants, adventurePlayers, groupMembers, playlists, playlistTracks } from '../db/schema.js';
 
 const router = new Hono();
 
@@ -46,7 +46,15 @@ router.get('/:id', async (c) => {
 
   const players = await db.select().from(adventurePlayers).where(eq(adventurePlayers.adventureId, id));
 
-  return c.json({ ...adventure, imageScenes: scenesWithImages, encounters: encountersWithCombatants, players });
+  const playlistRows = await db.select().from(playlists).where(eq(playlists.adventureId, id)).orderBy(playlists.sortOrder);
+  const playlistsWithTracks = await Promise.all(
+    playlistRows.map(async (pl) => ({
+      ...pl,
+      tracks: await db.select().from(playlistTracks).where(eq(playlistTracks.playlistId, pl.id)).orderBy(playlistTracks.sortOrder),
+    }))
+  );
+
+  return c.json({ ...adventure, imageScenes: scenesWithImages, encounters: encountersWithCombatants, players, playlists: playlistsWithTracks });
 });
 
 const adventureSchema = z.object({
@@ -136,10 +144,13 @@ router.put('/scenes/images/:imageId', zValidator('json', z.object({ sortOrder: z
   return c.json(updated);
 });
 
-router.patch('/scenes/images/:imageId', zValidator('json', z.object({ fit: z.enum(['cover', 'fit', 'center']) })), async (c) => {
+router.patch('/scenes/images/:imageId', zValidator('json', z.object({
+  fit: z.enum(['cover', 'fit', 'center']).optional(),
+  playlistId: z.number().int().nullable().optional(),
+})), async (c) => {
   const imageId = Number(c.req.param('imageId'));
-  const { fit } = c.req.valid('json');
-  const [updated] = await db.update(sceneImages).set({ fit }).where(eq(sceneImages.id, imageId)).returning();
+  const data = c.req.valid('json');
+  const [updated] = await db.update(sceneImages).set(data).where(eq(sceneImages.id, imageId)).returning();
   if (!updated) return c.json({ error: 'Not found' }, 404);
   return c.json(updated);
 });

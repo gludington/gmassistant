@@ -10,6 +10,26 @@ export const adventures = sqliteTable('adventures', {
   updatedAt: text('updated_at').notNull().$defaultFn(() => new Date().toISOString()),
 });
 
+export const playlists = sqliteTable('playlists', {
+  id: integer('id').primaryKey({ autoIncrement: true }),
+  adventureId: integer('adventure_id')
+    .notNull()
+    .references(() => adventures.id, { onDelete: 'cascade' }),
+  name: text('name').notNull(),
+  sortOrder: integer('sort_order').notNull().default(0),
+});
+
+export const playlistTracks = sqliteTable('playlist_tracks', {
+  id: integer('id').primaryKey({ autoIncrement: true }),
+  playlistId: integer('playlist_id')
+    .notNull()
+    .references(() => playlists.id, { onDelete: 'cascade' }),
+  name: text('name').notNull(),
+  type: text('type', { enum: ['file', 'youtube'] }).notNull().default('file'),
+  url: text('url').notNull(),
+  sortOrder: integer('sort_order').notNull().default(0),
+});
+
 export const imageScenes = sqliteTable('image_scenes', {
   id: integer('id').primaryKey({ autoIncrement: true }),
   adventureId: integer('adventure_id')
@@ -27,6 +47,7 @@ export const sceneImages = sqliteTable('scene_images', {
   filePath: text('file_path').notNull(),
   sortOrder: integer('sort_order').notNull().default(0),
   fit: text('fit', { enum: ['cover', 'fit', 'center'] }).notNull().default('fit'),
+  playlistId: integer('playlist_id').references(() => playlists.id, { onDelete: 'set null' }),
 });
 
 export const encounters = sqliteTable('encounters', {
@@ -36,6 +57,7 @@ export const encounters = sqliteTable('encounters', {
     .references(() => adventures.id, { onDelete: 'cascade' }),
   name: text('name').notNull(),
   description: text('description'),
+  playlistId: integer('playlist_id').references(() => playlists.id, { onDelete: 'set null' }),
 });
 
 export const combatants = sqliteTable('combatants', {

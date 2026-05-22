@@ -4,6 +4,7 @@ import { useState, useRef } from 'react';
 import { useBroadcastSender } from '../hooks/useBroadcast';
 import type { SceneFit } from '@gmassisstant/types';
 import { Open5eSearch } from '../components/Open5eSearch';
+import { useAudio, type Playlist } from '../hooks/useAudio';
 
 // ── Types ────────────────────────────────────────────────────────────────────
 
@@ -24,6 +25,7 @@ interface Encounter {
   id: number;
   name: string;
   description: string | null;
+  playlistId: number | null;
   combatants: Combatant[];
 }
 
@@ -39,6 +41,7 @@ interface ImageScene {
   id: number;
   name: string;
   sortOrder: number;
+  playlistId: number | null;
   images: SceneImage[];
 }
 
@@ -63,6 +66,7 @@ interface AdventureDetail {
   players: Player[];
   imageScenes: ImageScene[];
   encounters: Encounter[];
+  playlists: Playlist[];
 }
 
 // ── Route ────────────────────────────────────────────────────────────────────
@@ -348,6 +352,9 @@ function AdventureDetailPage() {
           ))}
         </Section>
 
+        {/* Playlists */}
+        <PlaylistsSection adventureId={Number(adventureId)} playlists={data.playlists} onInvalidate={invalidate} />
+
         {/* Image Scenes */}
         <Section
           title="Image Scenes"
@@ -367,6 +374,7 @@ function AdventureDetailPage() {
             <SceneCard
               key={scene.id}
               scene={scene}
+              playlists={data.playlists}
               onDelete={() => deleteScene.mutate(scene.id)}
               onInvalidate={invalidate}
               onSend={(filePath, fit) => {
@@ -399,6 +407,7 @@ function AdventureDetailPage() {
             <EncounterCard
               key={e.id}
               encounter={e}
+              playlists={data.playlists}
               onDelete={() => deleteEncounter.mutate(e.id)}
               onInvalidate={invalidate}
             />
@@ -409,16 +418,185 @@ function AdventureDetailPage() {
   );
 }
 
+// ── PlaylistsSection ──────────────────────────────────────────────────────────
+
+function PlaylistsSection({ adventureId, playlists, onInvalidate }: { adventureId: number; playlists: Playlist[]; onInvalidate: () => void }) {
+  const [newName, setNewName] = useState('');
+  const [expandedId, setExpandedId] = useState<number | null>(null);
+  const [addingTrackId, setAddingTrackId] = useState<number | null>(null);
+  const { playPlaylist } = useAudio();
+
+  const createPlaylist = useMutation({
+    mutationFn: async () => {
+      if (!newName.trim()) return;
+      await fetch('/api/playlists', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ adventureId, name: newName.trim(), sortOrder: playlists.length }),
+      });
+    },
+    onSuccess: () => { onInvalidate(); setNewName(''); },
+  });
+
+  const deletePlaylist = useMutation({
+    mutationFn: async (id: number) => { await fetch(`/api/playlists/${id}`, { method: 'DELETE' }); },
+    onSuccess: onInvalidate,
+  });
+
+  const deleteTrack = useMutation({
+    mutationFn: async (id: number) => { await fetch(`/api/playlists/tracks/${id}`, { method: 'DELETE' }); },
+    onSuccess: onInvalidate,
+  });
+
+  return (
+    <section style={s.section}>
+      <div style={s.sectionHeader}>
+        <h2 style={s.sectionTitle}>Playlists ({playlists.length})</h2>
+      </div>
+      <form style={{ display: 'flex', gap: 8, marginBottom: 12 }} onSubmit={(e) => { e.preventDefault(); createPlaylist.mutate(); }}>
+        <input
+          style={{ ...s.input, flex: 1 }}
+          placeholder="New playlist name"
+          value={newName}
+          onChange={(e) => setNewName(e.target.value)}
+        />
+        <button style={s.btnPrimary} type="submit" disabled={!newName.trim() || createPlaylist.isPending}>+ Add Playlist</button>
+      </form>
+      {playlists.length === 0 && <p style={s.muted}>No playlists yet.</p>}
+      {playlists.map((pl) => (
+        <div key={pl.id} style={{ ...s.sceneWrapper, marginBottom: 8 }}>
+          <div style={s.card}>
+            <div style={s.cardBody}>
+              <strong style={s.cardTitle}>{pl.name}</strong>
+              <span style={{ ...s.badge, marginLeft: 8 }}>{pl.tracks.length} tracks</span>
+            </div>
+            <div style={s.cardRight}>
+              {pl.tracks.length > 0 && (
+                <button style={{ ...s.btnIcon, color: '#c9a84c' }} onClick={() => playPlaylist(pl)} title="Play now">▶</button>
+              )}
+              <button style={s.btnSecondarySmall} onClick={() => setExpandedId(expandedId === pl.id ? null : pl.id)}>
+                {expandedId === pl.id ? 'Close' : 'Manage'}
+              </button>
+              <button style={s.btnIcon} onClick={() => deletePlaylist.mutate(pl.id)}>✕</button>
+            </div>
+          </div>
+          {expandedId === pl.id && (
+            <div style={s.sceneDetail}>
+              {pl.tracks.map((track) => (
+                <div key={track.id} style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4, padding: '4px 8px', background: '#1a1a2e', borderRadius: 4 }}>
+                  <span style={{ fontSize: '0.75rem' }}>{track.type === 'youtube' ? '▶' : '🎵'}</span>
+                  <span style={{ flex: 1, fontSize: '0.875rem' }}>{track.name}</span>
+                  <span style={{ fontSize: '0.7rem', color: '#555', maxWidth: 180, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{track.url}</span>
+                  <button style={s.btnIcon} onClick={() => deleteTrack.mutate(track.id)}>✕</button>
+                </div>
+              ))}
+              {addingTrackId === pl.id ? (
+                <AddTrackForm
+                  playlistId={pl.id}
+                  onSuccess={() => { onInvalidate(); setAddingTrackId(null); }}
+                  onCancel={() => setAddingTrackId(null)}
+                />
+              ) : (
+                <button style={{ ...s.btnSecondarySmall, marginTop: 8 }} onClick={() => setAddingTrackId(pl.id)}>+ Add Track</button>
+              )}
+            </div>
+          )}
+        </div>
+      ))}
+    </section>
+  );
+}
+
+function AddTrackForm({ playlistId, onSuccess, onCancel }: { playlistId: number; onSuccess: () => void; onCancel: () => void }) {
+  const [name, setName] = useState('');
+  const [type, setType] = useState<'file' | 'youtube'>('youtube');
+  const [url, setUrl] = useState('');
+  const [uploading, setUploading] = useState(false);
+  const fileRef = useRef<HTMLInputElement>(null);
+
+  const addTrack = useMutation({
+    mutationFn: async (data: { name: string; type: 'file' | 'youtube'; url: string }) => {
+      await fetch('/api/playlists/tracks', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ playlistId, ...data, sortOrder: 0 }),
+      });
+    },
+    onSuccess,
+  });
+
+  async function handleFileUpload(files: FileList | null) {
+    if (!files || files.length === 0) return;
+    setUploading(true);
+    try {
+      for (let i = 0; i < files.length; i++) {
+        const form = new FormData();
+        form.append('file', files[i]);
+        const res = await fetch('/api/playlists/upload', { method: 'POST', body: form });
+        if (!res.ok) continue;
+        const { url: fileUrl, name: fileName } = await res.json() as { url: string; name: string };
+        await fetch('/api/playlists/tracks', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ playlistId, name: fileName, type: 'file', url: fileUrl, sortOrder: 0 }),
+        });
+      }
+      onSuccess();
+    } finally {
+      setUploading(false);
+    }
+  }
+
+  function handleSubmit(e: React.FormEvent) {
+    e.preventDefault();
+    if (!name.trim() || !url.trim()) return;
+    addTrack.mutate({ name: name.trim(), type, url: url.trim() });
+  }
+
+  return (
+    <form style={{ ...s.form, marginTop: 8 }} onSubmit={handleSubmit}>
+      <div style={s.formRow}>
+        <select style={s.input} value={type} onChange={(e) => setType(e.target.value as 'file' | 'youtube')}>
+          <option value="youtube">YouTube</option>
+          <option value="file">Upload File</option>
+        </select>
+      </div>
+      {type === 'youtube' ? (
+        <>
+          <input style={s.input} placeholder="Track name" value={name} onChange={(e) => setName(e.target.value)} />
+          <input style={s.input} placeholder="YouTube URL (https://youtube.com/watch?v=...)" value={url} onChange={(e) => setUrl(e.target.value)} />
+          <div style={{ display: 'flex', gap: 8 }}>
+            <button style={s.btnPrimary} type="submit" disabled={addTrack.isPending || !name.trim() || !url.trim()}>Add</button>
+            <button style={s.btnSecondary} type="button" onClick={onCancel}>Cancel</button>
+          </div>
+        </>
+      ) : (
+        <>
+          <input ref={fileRef} type="file" accept="audio/*" multiple style={{ display: 'none' }} onChange={(e) => handleFileUpload(e.target.files)} />
+          <div style={{ display: 'flex', gap: 8 }}>
+            <button style={s.btnPrimary} type="button" disabled={uploading} onClick={() => fileRef.current?.click()}>
+              {uploading ? 'Uploading...' : 'Choose Audio Files'}
+            </button>
+            <button style={s.btnSecondary} type="button" onClick={onCancel}>Cancel</button>
+          </div>
+        </>
+      )}
+    </form>
+  );
+}
+
 // ── SceneCard ─────────────────────────────────────────────────────────────────
 
 function SceneCard({
   scene,
+  playlists,
   onDelete,
   onInvalidate,
   onSend,
   onClearPlayer,
 }: {
   scene: ImageScene;
+  playlists: Playlist[];
   onDelete: () => void;
   onInvalidate: () => void;
   onSend: (filePath: string, fit: SceneFit) => void;
@@ -427,6 +605,18 @@ function SceneCard({
   const [expanded, setExpanded] = useState(false);
   const [uploading, setUploading] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const { playPlaylist } = useAudio();
+
+  const setScenePlaylist = useMutation({
+    mutationFn: async (playlistId: number | null) => {
+      await fetch(`/api/adventures/scenes/${scene.id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ playlistId }),
+      });
+    },
+    onSuccess: onInvalidate,
+  });
 
 
   const updateImageFit = useMutation({
@@ -500,11 +690,27 @@ function SceneCard({
 
   const sorted = [...scene.images].sort((a, b) => a.sortOrder - b.sortOrder);
 
+  const activePlaylist = playlists.find((p) => p.id === scene.playlistId) ?? null;
+
   return (
     <div style={s.sceneWrapper}>
       <div style={s.card}>
         <div style={s.cardBody}>
           <strong style={s.cardTitle}>{scene.name}</strong>
+          <div style={{ marginTop: 4, display: 'flex', alignItems: 'center', gap: 6 }}>
+            <span style={{ fontSize: '0.72rem', color: '#666' }}>🎵</span>
+            <select
+              style={{ ...s.input, fontSize: '0.75rem', padding: '2px 6px', color: '#888' }}
+              value={scene.playlistId ?? ''}
+              onChange={(e) => setScenePlaylist.mutate(e.target.value ? Number(e.target.value) : null)}
+            >
+              <option value="">No playlist</option>
+              {playlists.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
+            </select>
+            {activePlaylist && activePlaylist.tracks.length > 0 && (
+              <button style={{ ...s.btnIcon, color: '#c9a84c' }} title="Play playlist now" onClick={() => playPlaylist(activePlaylist)}>▶</button>
+            )}
+          </div>
         </div>
         <div style={s.cardRight}>
           <span style={s.badge}>{scene.images.length} images</span>
@@ -551,7 +757,10 @@ function SceneCard({
                     <button
                       style={s.tileBtn}
                       title="Push to player screen"
-                      onClick={() => onSend(img.filePath, img.fit)}
+                      onClick={() => {
+                        onSend(img.filePath, img.fit);
+                        if (activePlaylist && activePlaylist.tracks.length > 0) playPlaylist(activePlaylist);
+                      }}
                     >
                       ▶ Show
                     </button>
@@ -602,13 +811,28 @@ function SceneCard({
 // ── EncounterCard ─────────────────────────────────────────────────────────────
 
 function EncounterCard({
-  encounter, onDelete, onInvalidate,
+  encounter, playlists, onDelete, onInvalidate,
 }: {
   encounter: Encounter;
+  playlists: Playlist[];
   onDelete: () => void;
   onInvalidate: () => void;
 }) {
   const [expanded, setExpanded] = useState(false);
+  const { playPlaylist } = useAudio();
+
+  const setEncounterPlaylist = useMutation({
+    mutationFn: async (playlistId: number | null) => {
+      await fetch(`/api/encounters/${encounter.id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ playlistId }),
+      });
+    },
+    onSuccess: onInvalidate,
+  });
+
+  const activePlaylist = playlists.find((p) => p.id === encounter.playlistId) ?? null;
 
   return (
     <div style={s.sceneWrapper}>
@@ -616,6 +840,20 @@ function EncounterCard({
         <div style={s.cardBody}>
           <strong style={s.cardTitle}>{encounter.name}</strong>
           {encounter.description && <p style={s.cardDesc}>{encounter.description}</p>}
+          <div style={{ marginTop: 4, display: 'flex', alignItems: 'center', gap: 6 }}>
+            <span style={{ fontSize: '0.72rem', color: '#666' }}>🎵</span>
+            <select
+              style={{ ...s.input, fontSize: '0.75rem', padding: '2px 6px', color: '#888' }}
+              value={encounter.playlistId ?? ''}
+              onChange={(e) => setEncounterPlaylist.mutate(e.target.value ? Number(e.target.value) : null)}
+            >
+              <option value="">No playlist</option>
+              {playlists.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
+            </select>
+            {activePlaylist && activePlaylist.tracks.length > 0 && (
+              <button style={{ ...s.btnIcon, color: '#c9a84c' }} title="Play playlist now" onClick={() => playPlaylist(activePlaylist)}>▶</button>
+            )}
+          </div>
         </div>
         <div style={s.cardRight}>
           <span style={s.badge}>{encounter.combatants.length} combatants</span>
@@ -1073,7 +1311,7 @@ function EncounterForm({
 // ── Styles ───────────────────────────────────────────────────────────────────
 
 const s: Record<string, React.CSSProperties> = {
-  page: { minHeight: '100vh', background: '#1a1a2e', color: '#e0e0e0' },
+  page: { minHeight: '100vh', background: '#1a1a2e', color: '#e0e0e0', paddingBottom: 60 },
   header: {
     padding: '16px 32px', borderBottom: '1px solid #2a2a4a',
     background: '#16213e', display: 'flex', alignItems: 'center', gap: 16,

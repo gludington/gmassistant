@@ -6,6 +6,7 @@ import adventures from './routes/adventures.js';
 import encounters from './routes/encounters.js';
 import sessions from './routes/sessions.js';
 import uploads from './routes/uploads.js';
+import playlistsRouter from './routes/playlists.js';
 
 const app = new Hono();
 
@@ -23,6 +24,7 @@ app.route('/api/adventures', adventures);
 app.route('/api/encounters', encounters);
 app.route('/api/sessions', sessions);
 app.route('/api/uploads', uploads);
+app.route('/api/playlists', playlistsRouter);
 
 app.get('/health', (c) => c.json({ ok: true }));
 
