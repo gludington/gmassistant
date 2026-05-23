@@ -1,1 +1,5 @@
-// contextBridge shim — extend here when IPC is needed
+import { contextBridge, ipcRenderer } from 'electron';
+
+contextBridge.exposeInMainWorld('electronAPI', {
+  setFullScreen: (flag: boolean) => ipcRenderer.send('set-fullscreen', flag),
+});

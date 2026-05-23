@@ -55,7 +55,19 @@ function PlayerScreen() {
   const [needsClick, setNeedsClick] = useState(false);
 
   useEffect(() => {
-    document.documentElement.requestFullscreen().catch(() => setNeedsClick(true));
+    const api = (window as { electronAPI?: { setFullScreen: (f: boolean) => void } }).electronAPI;
+    if (api) {
+      api.setFullScreen(true);
+    } else {
+      document.documentElement.requestFullscreen().catch(() => setNeedsClick(true));
+    }
+    return () => {
+      if (api) {
+        api.setFullScreen(false);
+      } else if (document.fullscreenElement) {
+        document.exitFullscreen().catch(() => {});
+      }
+    };
   }, []);
 
   useEffect(() => {
@@ -83,7 +95,12 @@ function PlayerScreen() {
 
   function enterFullscreen() {
     setNeedsClick(false);
-    document.documentElement.requestFullscreen().catch(() => {});
+    const api = (window as { electronAPI?: { setFullScreen: (f: boolean) => void } }).electronAPI;
+    if (api) {
+      api.setFullScreen(true);
+    } else {
+      document.documentElement.requestFullscreen().catch(() => {});
+    }
   }
 
   const handleMessage = useCallback((msg: BroadcastMessage) => {
