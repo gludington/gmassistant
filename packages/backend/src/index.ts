@@ -1,8 +1,7 @@
 import { serve } from '@hono/node-server';
 import { serveStatic } from '@hono/node-server/serve-static';
-import { pathToFileURL } from 'node:url';
+import { pathToFileURL, fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
-import { fileURLToPath } from 'node:url';
 import { readFile } from 'node:fs/promises';
 import { migrate } from 'drizzle-orm/libsql/migrator';
 import { createLibsqlDb } from './db/index.js';
@@ -13,9 +12,6 @@ const UPLOADS_DIR = process.env.UPLOADS_BASE_DIR ?? join(process.cwd(), 'uploads
 const db = createLibsqlDb();
 const storage = new LocalStorage(UPLOADS_DIR);
 const app = createApp(db, storage);
-
-const migrationsFolder = join(dirname(fileURLToPath(import.meta.url)), '..', 'drizzle');
-await migrate(db, { migrationsFolder });
 
 // Desktop app: serve the pre-built frontend so all requests share one HTTP origin
 const frontendDir = process.env.ELECTRON_FRONTEND_DIR;
@@ -32,6 +28,8 @@ if (frontendDir) {
 export { app };
 
 if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
+  const migrationsFolder = join(dirname(fileURLToPath(import.meta.url)), '..', 'drizzle');
+  await migrate(db, { migrationsFolder });
   const port = Number(process.env.PORT ?? 3000);
   serve({ fetch: app.fetch, port }, () => {
     console.log(`Backend running on http://localhost:${port}`);
