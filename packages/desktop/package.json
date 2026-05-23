@@ -10,14 +10,7 @@
   "homepage": "https://github.com/gludington/gmassistant",
   "main": "dist/main.js",
   "scripts": {
-    "dev": "tsc && electron .",
-    "build": "tsc",
-    "package": "electron-builder",
-    "package:linux": "electron-builder --linux",
-    "package:win": "electron-builder --win",
-    "package:mac": "electron-builder --mac",
-    "package:all": "electron-builder --linux --win --mac",
-    "package:args": "electron-builder --"
+    "dev": "tsc && electron ."
   },
   "dependencies": {
     "@gmassisstant/backend": "workspace:*",

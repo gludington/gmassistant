@@ -1,8 +1,9 @@
 import { app as electronApp, BrowserWindow, protocol, net, session } from 'electron';
-import { join } from 'node:path';
+import { join, dirname } from 'node:path';
 import { createServer } from 'node:net';
 import type { AddressInfo } from 'node:net';
 import { serve } from '@hono/node-server';
+import { migrate } from 'drizzle-orm/libsql/migrator';
 
 // Set data paths before any backend module initialises
 const userData = electronApp.getPath('userData');
@@ -22,11 +23,9 @@ function getFreePort(): Promise<number> {
 }
 
 async function startBackend(): Promise<number> {
-  // Dynamic import required because backend is ESM
-  const [{ app: honoApp }, { db }, { migrate }] = await Promise.all([
+  const [{ app: honoApp }, { db }] = await Promise.all([
     import('@gmassisstant/backend') as Promise<{ app: { fetch: (r: Request) => Promise<Response> } }>,
-    import('@gmassisstant/backend/db') as Promise<{ db: unknown }>,
-    import('drizzle-orm/libsql/migrator') as Promise<{ migrate: (db: unknown, opts: { migrationsFolder: string }) => Promise<void> }>,
+    import('@gmassisstant/backend/db') as unknown as Promise<{ db: Parameters<typeof migrate>[0] }>,
   ]);
 
   await migrate(db, {
@@ -87,7 +86,6 @@ async function createWindow(port: number) {
 }
 
 electronApp.whenReady().then(async () => {
-  // Allow YouTube iframes
   session.defaultSession.webRequest.onHeadersReceived((details, callback) => {
     callback({
       responseHeaders: {

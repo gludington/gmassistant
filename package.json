@@ -6,13 +6,12 @@
     "build": "pnpm --filter @gmassisstant/types build && pnpm --filter @gmassisstant/backend build && pnpm --filter @gmassisstant/frontend build",
     "db:generate": "pnpm --filter @gmassisstant/backend db:generate",
     "db:migrate": "pnpm --filter @gmassisstant/backend db:migrate",
-    "desktop:dev": "concurrently -n backend,frontend,electron -c blue,green,yellow \"pnpm --filter @gmassisstant/backend dev\" \"pnpm --filter @gmassisstant/frontend dev\" \"wait-on http://localhost:5173 && pnpm --filter @gmassisstant/desktop dev\"",
-    "desktop:compile": "pnpm --filter @gmassisstant/types build && pnpm --filter @gmassisstant/backend build && pnpm --filter @gmassisstant/frontend build --mode desktop && pnpm --filter @gmassisstant/desktop build",
-    "desktop:build": "pnpm desktop:compile && pnpm --filter @gmassisstant/desktop package:all",
-    "desktop:build:linux": "pnpm desktop:compile && pnpm --filter @gmassisstant/desktop package:linux",
-    "desktop:build:win": "pnpm desktop:compile && pnpm --filter @gmassisstant/desktop package:win",
-    "desktop:build:mac": "pnpm desktop:compile && pnpm --filter @gmassisstant/desktop package:mac",
-    "desktop:package": "pnpm --filter @gmassisstant/desktop package:args --"
+    "desktop:dev": "concurrently -n backend,frontend,electron -c blue,green,yellow \"pnpm --filter @gmassisstant/backend dev\" \"pnpm --filter @gmassisstant/frontend dev\" \"wait-on http://localhost:5173 && cd packages/desktop && electron .\"",
+    "desktop:compile": "cd packages/backend && tsc && cd ../frontend && vite build --mode desktop && cd ../desktop && tsc",
+    "desktop:build": "pnpm desktop:compile && cd packages/desktop && electron-builder --linux --win --mac",
+    "desktop:build:linux": "pnpm desktop:compile && cd packages/desktop && electron-builder --linux",
+    "desktop:build:win": "pnpm desktop:compile && cd packages/desktop && electron-builder --win",
+    "desktop:build:mac": "pnpm desktop:compile && cd packages/desktop && electron-builder --mac"
   },
   "devDependencies": {
     "concurrently": "^9.0.0",
