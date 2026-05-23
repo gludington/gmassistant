@@ -1,6 +1,7 @@
 appId: com.gmassisstant.desktop
 productName: GM Assistant
 copyright: Copyright © 2026
+icon: assets/icon.png
 
 directories:
   output: release
@@ -21,6 +22,8 @@ extraResources:
     filter:
       - "*.sql"
       - "meta/**"
+  - from: assets/icon.png
+    to: icon.png
 
 win:
   target:
