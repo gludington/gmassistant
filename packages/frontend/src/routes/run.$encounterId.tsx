@@ -239,7 +239,7 @@ function EncounterRunner() {
       if (!isResume && encounter.playlistId) {
         fetch(`/api/playlists?adventureId=${encounter.adventureId}`)
           .then((r) => r.json())
-          .then((pls: { id: number; name: string; sortOrder: number; adventureId: number; tracks: { id: number; playlistId: number; name: string; type: 'file' | 'youtube'; url: string; sortOrder: number }[] }[]) => {
+          .then((pls: { id: number; name: string; sortOrder: number; adventureId: number; playMode: 'sequential' | 'shuffle'; tracks: { id: number; playlistId: number; name: string; type: 'file' | 'youtube'; url: string; sortOrder: number }[] }[]) => {
             const pl = pls.find((p) => p.id === encounter.playlistId);
             if (pl && pl.tracks.length > 0) playPlaylist(pl);
           })
@@ -543,7 +543,7 @@ function EncounterRunner() {
 
   return (
     <div style={s.page}>
-      <GmHeader wrap rightSlot={
+      <GmHeader rightSlot={
         <button
           type="button"
           style={showPlaylistDrawer ? s.btnActive : s.btnSecondary}
@@ -572,40 +572,40 @@ function EncounterRunner() {
           <button style={s.navBtn} onClick={() => navigateActive(1)} title="Next combatant">▶</button>
         </div>
         <div style={s.headerActions}>
-          <button style={s.btnSecondary} onClick={rollAll}>Roll All Initiative</button>
-          <button style={s.btnSecondary} onClick={resetEncounter}>Reset Encounter</button>
-          <button style={s.btnDanger} onClick={endEncounter}>End Encounter</button>
-          <button style={showAddForm ? s.btnActive : s.btnSecondary} onClick={() => setShowAddForm((v) => !v)}>
+          <button style={s.btnHdr} onClick={rollAll}>Roll All</button>
+          <button style={s.btnHdr} onClick={resetEncounter}>Reset Encounter</button>
+          <button style={s.btnHdrDanger} onClick={endEncounter}>End Encounter</button>
+          <button style={showAddForm ? s.btnHdrActive : s.btnHdr} onClick={() => setShowAddForm((v) => !v)}>
             {showAddForm ? '✕ Cancel' : '+ Add Combatant'}
           </button>
           <button
-            style={s.btnSecondary}
+            style={s.btnHdr}
             onClick={toggleShowInitiative}
             title={showInitiative ? 'Hide initiative from player screen' : 'Show initiative on player screen'}
           >
             {showInitiative ? '⚔ Hide Initiative' : '⚔ Show Initiative'}
           </button>
           <button
-            style={s.btnSecondary}
+            style={s.btnHdr}
             onClick={toggleShowHp}
             title={showHp ? 'Hide HP from player screen' : 'Show HP on player screen'}
           >
             {showHp ? '❤ Hide HP' : '❤ Show HP'}
           </button>
           <button
-            style={showOnPlayer ? s.btnActive : s.btnSecondary}
+            style={showOnPlayer ? s.btnHdrActive : s.btnHdr}
             onClick={togglePlayer}
           >
             {showOnPlayer ? '⬛ Hide Tracker' : '▶ Show Tracker'}
           </button>
-          <button style={s.btnDanger} onClick={blankPlayerScreen}>
+          <button style={s.btnHdrDanger} onClick={blankPlayerScreen}>
             Blank Screen
           </button>
           <button
-            style={s.btnSecondary}
+            style={s.btnHdr}
             onClick={() => window.open('/player', 'gmassisstant-player', 'width=1920,height=1080')}
           >
-            Open Player Screen
+            Player Screen
           </button>
         </div>
       </GmHeader>
@@ -1551,8 +1551,8 @@ function typeStyle(type: RunCombatant['type']): React.CSSProperties {
 const s: Record<string, React.CSSProperties> = {
   page: { minHeight: '100vh', background: '#1a1a2e', color: '#e0e0e0', paddingBottom: 60 },
   back: { color: '#c9a84c', textDecoration: 'none', fontSize: '0.875rem', whiteSpace: 'nowrap' },
-  title: { margin: 0, fontSize: '1.4rem', color: '#c9a84c', flex: 1 },
-  headerActions: { display: 'flex', gap: 8, flexWrap: 'wrap' },
+  title: { margin: 0, fontSize: '1.4rem', color: '#c9a84c', flexShrink: 1, minWidth: 0, maxWidth: 220, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' as const },
+  headerActions: { display: 'flex', gap: 6, flexShrink: 0, flexWrap: 'nowrap' as const },
   activeNav: {
     display: 'flex', alignItems: 'center', gap: 6,
     background: '#0f0f1f', border: '1px solid #2a2a4a', borderRadius: 6,
@@ -1716,21 +1716,41 @@ const s: Record<string, React.CSSProperties> = {
     fontSize: '0.7rem', color: '#888',
   },
 
-  // Header buttons
+  // Header buttons (full size — rightSlot / navBtn context)
   btnSecondary: {
     padding: '7px 14px', background: 'transparent', color: '#c9a84c',
     border: '1px solid #c9a84c', borderRadius: 4, cursor: 'pointer', fontSize: '0.85rem',
+    whiteSpace: 'nowrap' as const,
   },
   btnActive: {
     padding: '7px 14px', background: '#2d4a2d', color: '#4caf50',
     border: '1px solid #3d6a3d', borderRadius: 4, cursor: 'pointer', fontSize: '0.85rem', fontWeight: 600,
+    whiteSpace: 'nowrap' as const,
   },
   btnGhost: {
     padding: '7px 14px', background: 'transparent', color: '#666',
     border: '1px solid #444', borderRadius: 4, cursor: 'pointer', fontSize: '0.85rem',
+    whiteSpace: 'nowrap' as const,
   },
   btnDanger: {
     padding: '7px 14px', background: 'transparent', color: '#ef5350',
     border: '1px solid #ef5350', borderRadius: 4, cursor: 'pointer', fontSize: '0.85rem',
+    whiteSpace: 'nowrap' as const,
+  },
+  // Compact header action buttons
+  btnHdr: {
+    padding: '5px 8px', background: 'transparent', color: '#c9a84c',
+    border: '1px solid #c9a84c', borderRadius: 4, cursor: 'pointer', fontSize: '0.78rem',
+    whiteSpace: 'nowrap' as const,
+  },
+  btnHdrActive: {
+    padding: '5px 8px', background: '#2d4a2d', color: '#4caf50',
+    border: '1px solid #3d6a3d', borderRadius: 4, cursor: 'pointer', fontSize: '0.78rem', fontWeight: 600,
+    whiteSpace: 'nowrap' as const,
+  },
+  btnHdrDanger: {
+    padding: '5px 8px', background: 'transparent', color: '#ef5350',
+    border: '1px solid #ef5350', borderRadius: 4, cursor: 'pointer', fontSize: '0.78rem',
+    whiteSpace: 'nowrap' as const,
   },
 };

@@ -35,6 +35,7 @@ const playlistSchema = z.object({
   adventureId: z.number().int(),
   name: z.string().min(1),
   sortOrder: z.number().int().optional().default(0),
+  playMode: z.enum(['sequential', 'shuffle']).optional().default('sequential'),
 });
 
 router.post('/', zValidator('json', playlistSchema), async (c) => {
@@ -49,6 +50,15 @@ router.put('/:id', zValidator('json', z.object({ name: z.string().min(1) })), as
   const id = Number(c.req.param('id'));
   const { name } = c.req.valid('json');
   const [updated] = await db.update(playlists).set({ name }).where(eq(playlists.id, id)).returning();
+  if (!updated) return c.json({ error: 'Not found' }, 404);
+  return c.json(updated);
+});
+
+router.patch('/:id', zValidator('json', z.object({ playMode: z.enum(['sequential', 'shuffle']) })), async (c) => {
+  const db = c.var.db;
+  const id = Number(c.req.param('id'));
+  const { playMode } = c.req.valid('json');
+  const [updated] = await db.update(playlists).set({ playMode }).where(eq(playlists.id, id)).returning();
   if (!updated) return c.json({ error: 'Not found' }, 404);
   return c.json(updated);
 });

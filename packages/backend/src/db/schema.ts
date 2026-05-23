@@ -17,6 +17,7 @@ export const playlists = sqliteTable('playlists', {
     .references(() => adventures.id, { onDelete: 'cascade' }),
   name: text('name').notNull(),
   sortOrder: integer('sort_order').notNull().default(0),
+  playMode: text('play_mode', { enum: ['sequential', 'shuffle'] }).notNull().default('sequential'),
 });
 
 export const playlistTracks = sqliteTable('playlist_tracks', {

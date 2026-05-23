@@ -7,13 +7,57 @@
     "adventures": {
       "name": "adventures",
       "columns": {
-        "id": { "name": "id", "type": "integer", "primaryKey": true, "notNull": true, "autoincrement": true },
-        "name": { "name": "name", "type": "text", "primaryKey": false, "notNull": true, "autoincrement": false },
-        "description": { "name": "description", "type": "text", "primaryKey": false, "notNull": false, "autoincrement": false },
-        "show_hp": { "name": "show_hp", "type": "integer", "primaryKey": false, "notNull": true, "autoincrement": false, "default": false },
-        "show_initiative": { "name": "show_initiative", "type": "integer", "primaryKey": false, "notNull": true, "autoincrement": false, "default": false },
-        "created_at": { "name": "created_at", "type": "text", "primaryKey": false, "notNull": true, "autoincrement": false },
-        "updated_at": { "name": "updated_at", "type": "text", "primaryKey": false, "notNull": true, "autoincrement": false }
+        "id": {
+          "name": "id",
+          "type": "integer",
+          "primaryKey": true,
+          "notNull": true,
+          "autoincrement": true
+        },
+        "name": {
+          "name": "name",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "description": {
+          "name": "description",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "show_hp": {
+          "name": "show_hp",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": false
+        },
+        "show_initiative": {
+          "name": "show_initiative",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": false
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "updated_at": {
+          "name": "updated_at",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        }
       },
       "indexes": {},
       "foreignKeys": {},
@@ -24,10 +68,43 @@
     "playlists": {
       "name": "playlists",
       "columns": {
-        "id": { "name": "id", "type": "integer", "primaryKey": true, "notNull": true, "autoincrement": true },
-        "adventure_id": { "name": "adventure_id", "type": "integer", "primaryKey": false, "notNull": true, "autoincrement": false },
-        "name": { "name": "name", "type": "text", "primaryKey": false, "notNull": true, "autoincrement": false },
-        "sort_order": { "name": "sort_order", "type": "integer", "primaryKey": false, "notNull": true, "autoincrement": false, "default": 0 }
+        "id": {
+          "name": "id",
+          "type": "integer",
+          "primaryKey": true,
+          "notNull": true,
+          "autoincrement": true
+        },
+        "adventure_id": {
+          "name": "adventure_id",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "name": {
+          "name": "name",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "sort_order": {
+          "name": "sort_order",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": 0
+        },
+        "play_mode": {
+          "name": "play_mode",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": "'sequential'"
+        }
       },
       "indexes": {},
       "foreignKeys": {
@@ -35,8 +112,12 @@
           "name": "playlists_adventure_id_adventures_id_fk",
           "tableFrom": "playlists",
           "tableTo": "adventures",
-          "columnsFrom": ["adventure_id"],
-          "columnsTo": ["id"],
+          "columnsFrom": [
+            "adventure_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
           "onDelete": "cascade",
           "onUpdate": "no action"
         }
@@ -48,12 +129,50 @@
     "playlist_tracks": {
       "name": "playlist_tracks",
       "columns": {
-        "id": { "name": "id", "type": "integer", "primaryKey": true, "notNull": true, "autoincrement": true },
-        "playlist_id": { "name": "playlist_id", "type": "integer", "primaryKey": false, "notNull": true, "autoincrement": false },
-        "name": { "name": "name", "type": "text", "primaryKey": false, "notNull": true, "autoincrement": false },
-        "type": { "name": "type", "type": "text", "primaryKey": false, "notNull": true, "autoincrement": false, "default": "'file'" },
-        "url": { "name": "url", "type": "text", "primaryKey": false, "notNull": true, "autoincrement": false },
-        "sort_order": { "name": "sort_order", "type": "integer", "primaryKey": false, "notNull": true, "autoincrement": false, "default": 0 }
+        "id": {
+          "name": "id",
+          "type": "integer",
+          "primaryKey": true,
+          "notNull": true,
+          "autoincrement": true
+        },
+        "playlist_id": {
+          "name": "playlist_id",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "name": {
+          "name": "name",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "type": {
+          "name": "type",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": "'file'"
+        },
+        "url": {
+          "name": "url",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "sort_order": {
+          "name": "sort_order",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": 0
+        }
       },
       "indexes": {},
       "foreignKeys": {
@@ -61,8 +180,12 @@
           "name": "playlist_tracks_playlist_id_playlists_id_fk",
           "tableFrom": "playlist_tracks",
           "tableTo": "playlists",
-          "columnsFrom": ["playlist_id"],
-          "columnsTo": ["id"],
+          "columnsFrom": [
+            "playlist_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
           "onDelete": "cascade",
           "onUpdate": "no action"
         }
@@ -74,10 +197,35 @@
     "image_scenes": {
       "name": "image_scenes",
       "columns": {
-        "id": { "name": "id", "type": "integer", "primaryKey": true, "notNull": true, "autoincrement": true },
-        "adventure_id": { "name": "adventure_id", "type": "integer", "primaryKey": false, "notNull": true, "autoincrement": false },
-        "name": { "name": "name", "type": "text", "primaryKey": false, "notNull": true, "autoincrement": false },
-        "sort_order": { "name": "sort_order", "type": "integer", "primaryKey": false, "notNull": true, "autoincrement": false, "default": 0 }
+        "id": {
+          "name": "id",
+          "type": "integer",
+          "primaryKey": true,
+          "notNull": true,
+          "autoincrement": true
+        },
+        "adventure_id": {
+          "name": "adventure_id",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "name": {
+          "name": "name",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "sort_order": {
+          "name": "sort_order",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": 0
+        }
       },
       "indexes": {},
       "foreignKeys": {
@@ -85,8 +233,12 @@
           "name": "image_scenes_adventure_id_adventures_id_fk",
           "tableFrom": "image_scenes",
           "tableTo": "adventures",
-          "columnsFrom": ["adventure_id"],
-          "columnsTo": ["id"],
+          "columnsFrom": [
+            "adventure_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
           "onDelete": "cascade",
           "onUpdate": "no action"
         }
@@ -98,12 +250,50 @@
     "scene_images": {
       "name": "scene_images",
       "columns": {
-        "id": { "name": "id", "type": "integer", "primaryKey": true, "notNull": true, "autoincrement": true },
-        "scene_id": { "name": "scene_id", "type": "integer", "primaryKey": false, "notNull": true, "autoincrement": false },
-        "file_path": { "name": "file_path", "type": "text", "primaryKey": false, "notNull": true, "autoincrement": false },
-        "sort_order": { "name": "sort_order", "type": "integer", "primaryKey": false, "notNull": true, "autoincrement": false, "default": 0 },
-        "fit": { "name": "fit", "type": "text", "primaryKey": false, "notNull": true, "autoincrement": false, "default": "'fit'" },
-        "playlist_id": { "name": "playlist_id", "type": "integer", "primaryKey": false, "notNull": false, "autoincrement": false }
+        "id": {
+          "name": "id",
+          "type": "integer",
+          "primaryKey": true,
+          "notNull": true,
+          "autoincrement": true
+        },
+        "scene_id": {
+          "name": "scene_id",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "file_path": {
+          "name": "file_path",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "sort_order": {
+          "name": "sort_order",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": 0
+        },
+        "fit": {
+          "name": "fit",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": "'fit'"
+        },
+        "playlist_id": {
+          "name": "playlist_id",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        }
       },
       "indexes": {},
       "foreignKeys": {
@@ -111,8 +301,12 @@
           "name": "scene_images_scene_id_image_scenes_id_fk",
           "tableFrom": "scene_images",
           "tableTo": "image_scenes",
-          "columnsFrom": ["scene_id"],
-          "columnsTo": ["id"],
+          "columnsFrom": [
+            "scene_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
           "onDelete": "cascade",
           "onUpdate": "no action"
         },
@@ -120,8 +314,12 @@
           "name": "scene_images_playlist_id_playlists_id_fk",
           "tableFrom": "scene_images",
           "tableTo": "playlists",
-          "columnsFrom": ["playlist_id"],
-          "columnsTo": ["id"],
+          "columnsFrom": [
+            "playlist_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
           "onDelete": "set null",
           "onUpdate": "no action"
         }
@@ -133,11 +331,41 @@
     "encounters": {
       "name": "encounters",
       "columns": {
-        "id": { "name": "id", "type": "integer", "primaryKey": true, "notNull": true, "autoincrement": true },
-        "adventure_id": { "name": "adventure_id", "type": "integer", "primaryKey": false, "notNull": true, "autoincrement": false },
-        "name": { "name": "name", "type": "text", "primaryKey": false, "notNull": true, "autoincrement": false },
-        "description": { "name": "description", "type": "text", "primaryKey": false, "notNull": false, "autoincrement": false },
-        "playlist_id": { "name": "playlist_id", "type": "integer", "primaryKey": false, "notNull": false, "autoincrement": false }
+        "id": {
+          "name": "id",
+          "type": "integer",
+          "primaryKey": true,
+          "notNull": true,
+          "autoincrement": true
+        },
+        "adventure_id": {
+          "name": "adventure_id",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "name": {
+          "name": "name",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "description": {
+          "name": "description",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "playlist_id": {
+          "name": "playlist_id",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        }
       },
       "indexes": {},
       "foreignKeys": {
@@ -145,8 +373,12 @@
           "name": "encounters_adventure_id_adventures_id_fk",
           "tableFrom": "encounters",
           "tableTo": "adventures",
-          "columnsFrom": ["adventure_id"],
-          "columnsTo": ["id"],
+          "columnsFrom": [
+            "adventure_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
           "onDelete": "cascade",
           "onUpdate": "no action"
         },
@@ -154,8 +386,12 @@
           "name": "encounters_playlist_id_playlists_id_fk",
           "tableFrom": "encounters",
           "tableTo": "playlists",
-          "columnsFrom": ["playlist_id"],
-          "columnsTo": ["id"],
+          "columnsFrom": [
+            "playlist_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
           "onDelete": "set null",
           "onUpdate": "no action"
         }
@@ -167,16 +403,79 @@
     "combatants": {
       "name": "combatants",
       "columns": {
-        "id": { "name": "id", "type": "integer", "primaryKey": true, "notNull": true, "autoincrement": true },
-        "encounter_id": { "name": "encounter_id", "type": "integer", "primaryKey": false, "notNull": true, "autoincrement": false },
-        "name": { "name": "name", "type": "text", "primaryKey": false, "notNull": true, "autoincrement": false },
-        "max_hp": { "name": "max_hp", "type": "integer", "primaryKey": false, "notNull": true, "autoincrement": false },
-        "initiative_modifier": { "name": "initiative_modifier", "type": "integer", "primaryKey": false, "notNull": true, "autoincrement": false, "default": 0 },
-        "type": { "name": "type", "type": "text", "primaryKey": false, "notNull": true, "autoincrement": false, "default": "'enemy'" },
-        "color": { "name": "color", "type": "text", "primaryKey": false, "notNull": false, "autoincrement": false },
-        "description": { "name": "description", "type": "text", "primaryKey": false, "notNull": false, "autoincrement": false },
-        "visible_to_players": { "name": "visible_to_players", "type": "integer", "primaryKey": false, "notNull": true, "autoincrement": false, "default": true },
-        "stat_block": { "name": "stat_block", "type": "text", "primaryKey": false, "notNull": false, "autoincrement": false }
+        "id": {
+          "name": "id",
+          "type": "integer",
+          "primaryKey": true,
+          "notNull": true,
+          "autoincrement": true
+        },
+        "encounter_id": {
+          "name": "encounter_id",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "name": {
+          "name": "name",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "max_hp": {
+          "name": "max_hp",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "initiative_modifier": {
+          "name": "initiative_modifier",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": 0
+        },
+        "type": {
+          "name": "type",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": "'enemy'"
+        },
+        "color": {
+          "name": "color",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "description": {
+          "name": "description",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "visible_to_players": {
+          "name": "visible_to_players",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": true
+        },
+        "stat_block": {
+          "name": "stat_block",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        }
       },
       "indexes": {},
       "foreignKeys": {
@@ -184,8 +483,12 @@
           "name": "combatants_encounter_id_encounters_id_fk",
           "tableFrom": "combatants",
           "tableTo": "encounters",
-          "columnsFrom": ["encounter_id"],
-          "columnsTo": ["id"],
+          "columnsFrom": [
+            "encounter_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
           "onDelete": "cascade",
           "onUpdate": "no action"
         }
@@ -197,10 +500,35 @@
     "group_members": {
       "name": "group_members",
       "columns": {
-        "id": { "name": "id", "type": "integer", "primaryKey": true, "notNull": true, "autoincrement": true },
-        "combatant_id": { "name": "combatant_id", "type": "integer", "primaryKey": false, "notNull": true, "autoincrement": false },
-        "label": { "name": "label", "type": "text", "primaryKey": false, "notNull": true, "autoincrement": false },
-        "max_hp": { "name": "max_hp", "type": "integer", "primaryKey": false, "notNull": true, "autoincrement": false, "default": 10 }
+        "id": {
+          "name": "id",
+          "type": "integer",
+          "primaryKey": true,
+          "notNull": true,
+          "autoincrement": true
+        },
+        "combatant_id": {
+          "name": "combatant_id",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "label": {
+          "name": "label",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "max_hp": {
+          "name": "max_hp",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": 10
+        }
       },
       "indexes": {},
       "foreignKeys": {
@@ -208,8 +536,12 @@
           "name": "group_members_combatant_id_combatants_id_fk",
           "tableFrom": "group_members",
           "tableTo": "combatants",
-          "columnsFrom": ["combatant_id"],
-          "columnsTo": ["id"],
+          "columnsFrom": [
+            "combatant_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
           "onDelete": "cascade",
           "onUpdate": "no action"
         }
@@ -221,15 +553,71 @@
     "adventure_players": {
       "name": "adventure_players",
       "columns": {
-        "id": { "name": "id", "type": "integer", "primaryKey": true, "notNull": true, "autoincrement": true },
-        "adventure_id": { "name": "adventure_id", "type": "integer", "primaryKey": false, "notNull": true, "autoincrement": false },
-        "name": { "name": "name", "type": "text", "primaryKey": false, "notNull": true, "autoincrement": false },
-        "max_hp": { "name": "max_hp", "type": "integer", "primaryKey": false, "notNull": true, "autoincrement": false, "default": 10 },
-        "initiative_modifier": { "name": "initiative_modifier", "type": "integer", "primaryKey": false, "notNull": true, "autoincrement": false, "default": 0 },
-        "color": { "name": "color", "type": "text", "primaryKey": false, "notNull": false, "autoincrement": false },
-        "armor_class": { "name": "armor_class", "type": "integer", "primaryKey": false, "notNull": false, "autoincrement": false },
-        "spell_dc": { "name": "spell_dc", "type": "integer", "primaryKey": false, "notNull": false, "autoincrement": false },
-        "passive_perception": { "name": "passive_perception", "type": "integer", "primaryKey": false, "notNull": false, "autoincrement": false }
+        "id": {
+          "name": "id",
+          "type": "integer",
+          "primaryKey": true,
+          "notNull": true,
+          "autoincrement": true
+        },
+        "adventure_id": {
+          "name": "adventure_id",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "name": {
+          "name": "name",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "max_hp": {
+          "name": "max_hp",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": 10
+        },
+        "initiative_modifier": {
+          "name": "initiative_modifier",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": 0
+        },
+        "color": {
+          "name": "color",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "armor_class": {
+          "name": "armor_class",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "spell_dc": {
+          "name": "spell_dc",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "passive_perception": {
+          "name": "passive_perception",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        }
       },
       "indexes": {},
       "foreignKeys": {
@@ -237,8 +625,12 @@
           "name": "adventure_players_adventure_id_adventures_id_fk",
           "tableFrom": "adventure_players",
           "tableTo": "adventures",
-          "columnsFrom": ["adventure_id"],
-          "columnsTo": ["id"],
+          "columnsFrom": [
+            "adventure_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
           "onDelete": "cascade",
           "onUpdate": "no action"
         }
@@ -250,11 +642,41 @@
     "sessions": {
       "name": "sessions",
       "columns": {
-        "id": { "name": "id", "type": "integer", "primaryKey": true, "notNull": true, "autoincrement": true },
-        "adventure_id": { "name": "adventure_id", "type": "integer", "primaryKey": false, "notNull": true, "autoincrement": false },
-        "name": { "name": "name", "type": "text", "primaryKey": false, "notNull": true, "autoincrement": false },
-        "date": { "name": "date", "type": "text", "primaryKey": false, "notNull": true, "autoincrement": false },
-        "notes": { "name": "notes", "type": "text", "primaryKey": false, "notNull": false, "autoincrement": false }
+        "id": {
+          "name": "id",
+          "type": "integer",
+          "primaryKey": true,
+          "notNull": true,
+          "autoincrement": true
+        },
+        "adventure_id": {
+          "name": "adventure_id",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "name": {
+          "name": "name",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "date": {
+          "name": "date",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "notes": {
+          "name": "notes",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        }
       },
       "indexes": {},
       "foreignKeys": {
@@ -262,8 +684,12 @@
           "name": "sessions_adventure_id_adventures_id_fk",
           "tableFrom": "sessions",
           "tableTo": "adventures",
-          "columnsFrom": ["adventure_id"],
-          "columnsTo": ["id"],
+          "columnsFrom": [
+            "adventure_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
           "onDelete": "cascade",
           "onUpdate": "no action"
         }
