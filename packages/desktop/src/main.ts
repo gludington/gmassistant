@@ -11,6 +11,7 @@ import { migrate } from 'drizzle-orm/libsql/migrator';
 electronApp.commandLine.appendSwitch('autoplay-policy', 'no-user-gesture-required');
 
 // Set data paths before any backend module initialises
+electronApp.setName('GM Assistant');
 const isDev = !electronApp.isPackaged;
 const userData = electronApp.getPath('userData');
 process.env.DATABASE_URL = `file:${join(userData, 'gmassisstant.db')}`;
