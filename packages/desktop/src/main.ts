@@ -1,4 +1,4 @@
-import { app as electronApp, BrowserWindow, protocol, net, session } from 'electron';
+import { app as electronApp, BrowserWindow, dialog, protocol, net, session } from 'electron';
 import { join, dirname } from 'node:path';
 import { createServer } from 'node:net';
 import type { AddressInfo } from 'node:net';
@@ -79,38 +79,46 @@ async function createWindow(port: number) {
     await win.loadURL('http://localhost:5173');
     win.webContents.openDevTools();
   } else {
-    await win.loadFile(join(__dirname, 'frontend', 'index.html'));
+    await win.loadFile(join(process.resourcesPath, 'frontend', 'index.html'));
   }
 
   return win;
 }
 
 electronApp.whenReady().then(async () => {
-  session.defaultSession.webRequest.onHeadersReceived((details, callback) => {
-    callback({
-      responseHeaders: {
-        ...details.responseHeaders,
-        'Content-Security-Policy': [
-          "default-src 'self' 'unsafe-inline' 'unsafe-eval' https: data: blob:; " +
-            'frame-src https://www.youtube.com https://www.youtube-nocookie.com;',
-        ],
-      },
+  try {
+    session.defaultSession.webRequest.onHeadersReceived((details, callback) => {
+      callback({
+        responseHeaders: {
+          ...details.responseHeaders,
+          'Content-Security-Policy': [
+            "default-src 'self' 'unsafe-inline' 'unsafe-eval' https: data: blob:; " +
+              'frame-src https://www.youtube.com https://www.youtube-nocookie.com;',
+          ],
+        },
+      });
     });
-  });
 
-  const port = await startBackend();
+    const port = await startBackend();
 
-  if (!isDev) {
-    registerProtocolInterceptor(port);
-  }
-
-  await createWindow(port);
-
-  electronApp.on('activate', async () => {
-    if (BrowserWindow.getAllWindows().length === 0) {
-      await createWindow(port);
+    if (!isDev) {
+      registerProtocolInterceptor(port);
     }
-  });
+
+    await createWindow(port);
+
+    electronApp.on('activate', async () => {
+      if (BrowserWindow.getAllWindows().length === 0) {
+        await createWindow(port);
+      }
+    });
+  } catch (err) {
+    dialog.showErrorBox(
+      'GM Assistant — Startup Error',
+      `Failed to start:\n\n${err instanceof Error ? err.message : String(err)}`,
+    );
+    electronApp.quit();
+  }
 });
 
 electronApp.on('window-all-closed', () => {
