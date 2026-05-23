@@ -7,6 +7,7 @@ import { CONDITIONS, conditionIcon } from '../conditions';
 import { Open5eSearch } from '../components/Open5eSearch';
 import { GmHeader } from '../components/GmHeader';
 import { StatBlockEditor } from '../components/StatBlockEditor';
+import { PlaylistDrawer } from '../components/PlaylistDrawer';
 import { useAudio } from '../hooks/useAudio';
 
 // ── Types ────────────────────────────────────────────────────────────────────
@@ -186,6 +187,7 @@ function EncounterRunner() {
   const [activeCombatantId, setActiveCombatantId] = useState<number | null>(null);
   const [round, setRound] = useState(1);
   const [statBlockCombatant, setStatBlockCombatant] = useState<RunCombatant | null>(null);
+  const [showPlaylistDrawer, setShowPlaylistDrawer] = useState(false);
   const tempIdRef = useRef(-100000);
 
   useEffect(() => { send({ type: 'CLEAR_IMAGE' }); }, []);
@@ -499,7 +501,16 @@ function EncounterRunner() {
 
   return (
     <div style={s.page}>
-      <GmHeader wrap>
+      <GmHeader wrap rightSlot={
+        <button
+          type="button"
+          style={showPlaylistDrawer ? s.btnActive : s.btnSecondary}
+          onClick={() => setShowPlaylistDrawer(v => !v)}
+          title="Playlists"
+        >
+          🎵 Playlists
+        </button>
+      }>
         <Link
           to="/adventures/$adventureId"
           params={{ adventureId: String(encounter.adventureId) }}
@@ -555,6 +566,13 @@ function EncounterRunner() {
           </button>
         </div>
       </GmHeader>
+
+      {showPlaylistDrawer && (
+        <PlaylistDrawer
+          adventureId={encounter.adventureId}
+          onClose={() => setShowPlaylistDrawer(false)}
+        />
+      )}
 
       <main style={s.main}>
         {showAddForm && (
