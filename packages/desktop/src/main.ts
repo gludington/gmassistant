@@ -1,0 +1,120 @@
+import { app as electronApp, BrowserWindow, protocol, net, session } from 'electron';
+import { join } from 'node:path';
+import { createServer } from 'node:net';
+import type { AddressInfo } from 'node:net';
+import { serve } from '@hono/node-server';
+
+// Set data paths before any backend module initialises
+const userData = electronApp.getPath('userData');
+process.env.DATABASE_URL = `file:${join(userData, 'gmassisstant.db')}`;
+process.env.UPLOADS_BASE_DIR = join(userData, 'uploads');
+
+const isDev = !electronApp.isPackaged;
+
+function getFreePort(): Promise<number> {
+  return new Promise((resolve, reject) => {
+    const srv = createServer();
+    srv.listen(0, '127.0.0.1', () => {
+      const { port } = srv.address() as AddressInfo;
+      srv.close((err) => (err ? reject(err) : resolve(port)));
+    });
+  });
+}
+
+async function startBackend(): Promise<number> {
+  // Dynamic import required because backend is ESM
+  const [{ app: honoApp }, { db }, { migrate }] = await Promise.all([
+    import('@gmassisstant/backend') as Promise<{ app: { fetch: (r: Request) => Promise<Response> } }>,
+    import('@gmassisstant/backend/db') as Promise<{ db: unknown }>,
+    import('drizzle-orm/libsql/migrator') as Promise<{ migrate: (db: unknown, opts: { migrationsFolder: string }) => Promise<void> }>,
+  ]);
+
+  await migrate(db, {
+    migrationsFolder: isDev
+      ? join(__dirname, '../../backend/drizzle')
+      : join(process.resourcesPath, 'drizzle'),
+  });
+
+  const port = isDev ? 3000 : await getFreePort();
+  process.env.PORT = String(port);
+
+  await new Promise<void>((resolve) => {
+    serve({ fetch: honoApp.fetch, port }, () => {
+      console.log(`[desktop] Hono on port ${port}`);
+      resolve();
+    });
+  });
+
+  return port;
+}
+
+function registerProtocolInterceptor(port: number) {
+  protocol.handle('http', (request) => {
+    const url = new URL(request.url);
+    if (
+      url.hostname === 'localhost' &&
+      (url.pathname.startsWith('/api') || url.pathname.startsWith('/uploads'))
+    ) {
+      const target = `http://127.0.0.1:${port}${url.pathname}${url.search}`;
+      return net.fetch(target, {
+        method: request.method,
+        headers: request.headers,
+        body: request.body ?? undefined,
+      } as Parameters<typeof net.fetch>[1]);
+    }
+    return net.fetch(request);
+  });
+}
+
+async function createWindow(port: number) {
+  const win = new BrowserWindow({
+    width: 1440,
+    height: 900,
+    webPreferences: {
+      preload: join(__dirname, 'preload.js'),
+      contextIsolation: true,
+    },
+  });
+
+  if (isDev) {
+    await win.loadURL('http://localhost:5173');
+    win.webContents.openDevTools();
+  } else {
+    await win.loadFile(join(__dirname, 'frontend', 'index.html'));
+  }
+
+  return win;
+}
+
+electronApp.whenReady().then(async () => {
+  // Allow YouTube iframes
+  session.defaultSession.webRequest.onHeadersReceived((details, callback) => {
+    callback({
+      responseHeaders: {
+        ...details.responseHeaders,
+        'Content-Security-Policy': [
+          "default-src 'self' 'unsafe-inline' 'unsafe-eval' https: data: blob:; " +
+            'frame-src https://www.youtube.com https://www.youtube-nocookie.com;',
+        ],
+      },
+    });
+  });
+
+  const port = await startBackend();
+
+  if (!isDev) {
+    registerProtocolInterceptor(port);
+  }
+
+  await createWindow(port);
+
+  electronApp.on('activate', async () => {
+    if (BrowserWindow.getAllWindows().length === 0) {
+      await createWindow(port);
+    }
+  });
+});
+
+electronApp.on('window-all-closed', () => {
+  if (process.platform !== 'darwin') electronApp.quit();
+});

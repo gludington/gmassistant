@@ -8,5 +8,7 @@ dist/
 packages/backend/drizzle/meta/
 packages/types/src/*.js
 packages/backend/uploads/
+packages/desktop/release/
+packages/desktop/dist/
 ROADMAP.md
 sessions.txt

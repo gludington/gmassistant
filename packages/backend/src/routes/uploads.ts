@@ -5,7 +5,7 @@ import { randomUUID } from 'node:crypto';
 
 const router = new Hono();
 
-const UPLOADS_DIR = join(process.cwd(), 'uploads');
+const UPLOADS_DIR = process.env.UPLOADS_BASE_DIR ?? join(process.cwd(), 'uploads');
 
 router.post('/', async (c) => {
   const body = await c.req.parseBody();
