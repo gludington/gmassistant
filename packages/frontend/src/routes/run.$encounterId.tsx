@@ -1,4 +1,4 @@
-import { createFileRoute, Link } from '@tanstack/react-router';
+import { createFileRoute, Link, useNavigate } from '@tanstack/react-router';
 import { useQuery } from '@tanstack/react-query';
 import { useState, useEffect, useRef } from 'react';
 import type { LiveCombatant } from '@gmassisstant/types';
@@ -170,6 +170,7 @@ function sortCombatants(list: RunCombatant[]): RunCombatant[] {
 
 function EncounterRunner() {
   const { encounterId } = Route.useParams();
+  const navigate = useNavigate();
   const send = useBroadcastSender();
   const { playPlaylist } = useAudio();
   const [combatants, setCombatants] = useState<RunCombatant[]>([]);
@@ -189,6 +190,7 @@ function EncounterRunner() {
   const [statBlockCombatant, setStatBlockCombatant] = useState<RunCombatant | null>(null);
   const [showPlaylistDrawer, setShowPlaylistDrawer] = useState(false);
   const tempIdRef = useRef(-100000);
+  const runKey = `gma:run:${encounterId}`;
 
   useEffect(() => { send({ type: 'CLEAR_IMAGE' }); }, []);
 
@@ -203,16 +205,38 @@ function EncounterRunner() {
 
   useEffect(() => {
     if (encounter && !initialized) {
-      const newCombatants = encounter.combatants.map(toRunCombatant);
+      let newCombatants: RunCombatant[];
+      let initRound = 1;
+      let initActiveId: number | null = null;
+      let initShowOnPlayer = showOnPlayer;
+      let isResume = false;
+
+      const saved = localStorage.getItem(runKey);
+      if (saved) {
+        try {
+          const parsed = JSON.parse(saved);
+          newCombatants = parsed.combatants as RunCombatant[];
+          initRound = parsed.round ?? 1;
+          initActiveId = parsed.activeCombatantId ?? null;
+          initShowOnPlayer = parsed.showOnPlayer ?? showOnPlayer;
+          isResume = true;
+        } catch {
+          newCombatants = encounter.combatants.map(toRunCombatant);
+        }
+      } else {
+        newCombatants = encounter.combatants.map(toRunCombatant);
+      }
+
       setCombatants(newCombatants);
+      setRound(initRound);
+      setActiveCombatantId(initActiveId);
+      if (initShowOnPlayer !== showOnPlayer) setShowOnPlayer(initShowOnPlayer);
       setShowHp(encounter.showHp);
       setShowInitiative(encounter.showInitiative);
       setInitialized(true);
-      // Always broadcast on load so the player screen reflects this encounter.
-      // If showOnPlayer is true the tracker stays visible; if false it hides.
-      broadcast(newCombatants, showOnPlayer, encounter.showHp, encounter.showInitiative);
+      broadcast(newCombatants, initShowOnPlayer, encounter.showHp, encounter.showInitiative, initActiveId, initRound);
 
-      if (encounter.playlistId) {
+      if (!isResume && encounter.playlistId) {
         fetch(`/api/playlists?adventureId=${encounter.adventureId}`)
           .then((r) => r.json())
           .then((pls: { id: number; name: string; sortOrder: number; adventureId: number; tracks: { id: number; playlistId: number; name: string; type: 'file' | 'youtube'; url: string; sortOrder: number }[] }[]) => {
@@ -223,6 +247,17 @@ function EncounterRunner() {
       }
     }
   }, [encounter, initialized]);
+
+  // Persist live encounter state so it survives navigation away and back.
+  useEffect(() => {
+    if (!initialized) return;
+    localStorage.setItem(runKey, JSON.stringify({
+      combatants: combatants.map((c) => ({ ...c, editingHp: false, editingInit: false })),
+      round,
+      activeCombatantId,
+      showOnPlayer,
+    }));
+  }, [combatants, round, activeCombatantId, showOnPlayer, initialized]);
 
   // Broadcast next state directly — called from every event handler so the
   // send happens synchronously with the new values, not via a useEffect.
@@ -307,19 +342,26 @@ function EncounterRunner() {
     );
   }
 
-  function resetAll() {
-    setActiveCombatantId(null);
-    setRound(1);
-    const next = combatants.map((c) => {
-      if (c.type === 'group' && c.members) {
-        const resetMembers = c.members.map((m) => ({ ...m, currentHp: m.maxHp }));
-        const totalHp = resetMembers.reduce((sum, m) => sum + m.maxHp, 0);
-        return applyBloodied({ ...c, members: resetMembers, currentHp: totalHp, maxHp: totalHp, initiative: null, conditions: [] });
-      }
-      return applyBloodied({ ...c, currentHp: c.maxHp, initiative: null, conditions: [] });
-    });
+  function resetEncounter() {
+    if (!encounter) return;
+    localStorage.removeItem(runKey);
+    const next = encounter.combatants.map(toRunCombatant);
     setCombatants(next);
+    setRound(1);
+    setActiveCombatantId(null);
     broadcast(next, showOnPlayer, showHp, showInitiative, null, 1);
+  }
+
+  function endEncounter() {
+    if (!encounter) return;
+    localStorage.removeItem(runKey);
+    send({ type: 'CLEAR_IMAGE' });
+    send({ type: 'TOGGLE_INITIATIVE', payload: { visible: false } });
+    try {
+      const raw = localStorage.getItem('gma:initiative');
+      if (raw) localStorage.setItem('gma:initiative', JSON.stringify({ ...JSON.parse(raw), visible: false }));
+    } catch {}
+    navigate({ to: '/adventures/$adventureId', params: { adventureId: String(encounter.adventureId) } });
   }
 
   function navigateActive(direction: 1 | -1) {
@@ -531,19 +573,20 @@ function EncounterRunner() {
         </div>
         <div style={s.headerActions}>
           <button style={s.btnSecondary} onClick={rollAll}>Roll All Initiative</button>
-          <button style={s.btnGhost} onClick={resetAll}>Reset</button>
+          <button style={s.btnSecondary} onClick={resetEncounter}>Reset Encounter</button>
+          <button style={s.btnDanger} onClick={endEncounter}>End Encounter</button>
           <button style={showAddForm ? s.btnActive : s.btnSecondary} onClick={() => setShowAddForm((v) => !v)}>
             {showAddForm ? '✕ Cancel' : '+ Add Combatant'}
           </button>
           <button
-            style={s.btnGhost}
+            style={s.btnSecondary}
             onClick={toggleShowInitiative}
             title={showInitiative ? 'Hide initiative from player screen' : 'Show initiative on player screen'}
           >
             {showInitiative ? '⚔ Hide Initiative' : '⚔ Show Initiative'}
           </button>
           <button
-            style={s.btnGhost}
+            style={s.btnSecondary}
             onClick={toggleShowHp}
             title={showHp ? 'Hide HP from player screen' : 'Show HP on player screen'}
           >
@@ -553,13 +596,13 @@ function EncounterRunner() {
             style={showOnPlayer ? s.btnActive : s.btnSecondary}
             onClick={togglePlayer}
           >
-            {showOnPlayer ? '⬛ Hide from Player' : '▶ Show on Player'}
+            {showOnPlayer ? '⬛ Hide Tracker' : '▶ Show Tracker'}
           </button>
           <button style={s.btnDanger} onClick={blankPlayerScreen}>
             Blank Screen
           </button>
           <button
-            style={s.btnGhost}
+            style={s.btnSecondary}
             onClick={() => window.open('/player', 'gmassisstant-player', 'width=1920,height=1080')}
           >
             Open Player Screen

@@ -699,7 +699,9 @@ function EncounterCard({
   onInvalidate: () => void;
 }) {
   const [expanded, setExpanded] = useState(false);
+  const [isActive, setIsActive] = useState(() => !!localStorage.getItem(`gma:run:${encounter.id}`));
   const { playPlaylist } = useAudio();
+  const send = useBroadcastSender();
 
   const setEncounterPlaylist = useMutation({
     mutationFn: async (playlistId: number | null) => {
@@ -712,13 +714,31 @@ function EncounterCard({
     onSuccess: onInvalidate,
   });
 
+  function endEncounterFromHere() {
+    localStorage.removeItem(`gma:run:${encounter.id}`);
+    send({ type: 'CLEAR_IMAGE' });
+    send({ type: 'TOGGLE_INITIATIVE', payload: { visible: false } });
+    try {
+      const raw = localStorage.getItem('gma:initiative');
+      if (raw) localStorage.setItem('gma:initiative', JSON.stringify({ ...JSON.parse(raw), visible: false }));
+    } catch {}
+    setIsActive(false);
+  }
+
   const activePlaylist = playlists.find((p) => p.id === encounter.playlistId) ?? null;
 
   return (
-    <div style={s.sceneWrapper}>
+    <div style={{ ...s.sceneWrapper, ...(isActive ? { borderLeft: '3px solid #4caf50', paddingLeft: 8 } : {}) }}>
       <div style={s.card}>
         <div style={s.cardBody}>
-          <strong style={s.cardTitle}>{encounter.name}</strong>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+            <strong style={s.cardTitle}>{encounter.name}</strong>
+            {isActive && (
+              <span style={{ fontSize: '0.7rem', color: '#4caf50', border: '1px solid #3d6a3d', borderRadius: 10, padding: '1px 7px', fontWeight: 600, letterSpacing: '0.03em' }}>
+                ● Active
+              </span>
+            )}
+          </div>
           {encounter.description && <p style={s.cardDesc}>{encounter.description}</p>}
           <div style={{ marginTop: 4, display: 'flex', alignItems: 'center', gap: 6 }}>
             <span style={{ fontSize: '0.72rem', color: '#666' }}>🎵</span>
@@ -742,8 +762,13 @@ function EncounterCard({
             params={{ encounterId: String(encounter.id) }}
             style={s.btnRun}
           >
-            ▶ Run
+            {isActive ? '▶ Continue' : '▶ Run'}
           </Link>
+          {isActive && (
+            <button style={{ ...s.btnSecondarySmall, color: '#ef5350', borderColor: '#ef5350' }} onClick={endEncounterFromHere}>
+              End
+            </button>
+          )}
           <button style={s.btnSecondarySmall} onClick={() => setExpanded((v) => !v)}>
             {expanded ? 'Close' : 'Manage'}
           </button>
