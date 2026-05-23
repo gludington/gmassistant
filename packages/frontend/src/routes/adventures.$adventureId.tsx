@@ -1,10 +1,10 @@
 import { createFileRoute, Link } from '@tanstack/react-router';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { useState, useRef } from 'react';
+import { useState, useRef, useEffect } from 'react';
 import { useBroadcastSender } from '../hooks/useBroadcast';
 import type { SceneFit } from '@gmassisstant/types';
 import { Open5eSearch } from '../components/Open5eSearch';
-import { useAudio, type Playlist } from '../hooks/useAudio';
+import { useAudio, type Playlist, type PlaylistTrack } from '../hooks/useAudio';
 
 // ── Types ────────────────────────────────────────────────────────────────────
 
@@ -418,6 +418,88 @@ function AdventureDetailPage() {
   );
 }
 
+// ── TrackList ─────────────────────────────────────────────────────────────────
+
+function TrackList({ tracks, onDelete, onReorder }: {
+  tracks: PlaylistTrack[];
+  onDelete: (id: number) => void;
+  onReorder: (ordered: PlaylistTrack[]) => void;
+}) {
+  const [localTracks, setLocalTracks] = useState<PlaylistTrack[]>(tracks);
+  const [draggingId, setDraggingId] = useState<number | null>(null);
+  const lastOverIdRef = useRef<number | null>(null);
+  const droppedRef = useRef(false);
+
+  useEffect(() => {
+    if (draggingId === null) setLocalTracks(tracks);
+  }, [tracks]);
+
+  function handleDragStart(id: number) {
+    droppedRef.current = false;
+    lastOverIdRef.current = null;
+    setDraggingId(id);
+  }
+
+  function handleDragOver(e: React.DragEvent, id: number) {
+    e.preventDefault();
+    if (draggingId === null || draggingId === id || lastOverIdRef.current === id) return;
+    lastOverIdRef.current = id;
+    setLocalTracks(prev => {
+      const from = prev.findIndex(t => t.id === draggingId);
+      const to = prev.findIndex(t => t.id === id);
+      if (from === -1 || to === -1 || from === to) return prev;
+      const next = [...prev];
+      next.splice(to, 0, next.splice(from, 1)[0]);
+      return next;
+    });
+  }
+
+  function handleDrop() {
+    droppedRef.current = true;
+    setDraggingId(null);
+    onReorder(localTracks);
+  }
+
+  function handleDragEnd() {
+    if (!droppedRef.current) setLocalTracks(tracks);
+    droppedRef.current = false;
+    setDraggingId(null);
+  }
+
+  return (
+    <div>
+      {localTracks.map((track) => (
+        <div
+          key={track.id}
+          draggable
+          onDragStart={() => handleDragStart(track.id)}
+          onDragOver={(e) => handleDragOver(e, track.id)}
+          onDrop={handleDrop}
+          onDragEnd={handleDragEnd}
+          style={{
+            display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4,
+            padding: '4px 8px', background: '#1a1a2e', borderRadius: 4,
+            opacity: track.id === draggingId ? 0.35 : 1,
+            cursor: 'default',
+            transition: 'opacity 0.1s',
+          }}
+        >
+          <span
+            style={{ cursor: 'grab', color: '#444', fontSize: '1rem', userSelect: 'none', lineHeight: 1, flexShrink: 0 }}
+            title="Drag to reorder"
+          >
+            ⠿
+          </span>
+          <span style={{ fontSize: '0.75rem', flexShrink: 0 }}>{track.type === 'youtube' ? '▶' : '🎵'}</span>
+          <span style={{ flex: 1, fontSize: '0.875rem', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{track.name}</span>
+          <span style={{ fontSize: '0.7rem', color: '#555', maxWidth: 180, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', flexShrink: 0 }}>{track.url}</span>
+          <button style={s.btnIcon} onClick={() => onDelete(track.id)}>✕</button>
+        </div>
+      ))}
+    </div>
+  );
+}
+
 // ── PlaylistsSection ──────────────────────────────────────────────────────────
 
 function PlaylistsSection({ adventureId, playlists, onInvalidate }: { adventureId: number; playlists: Playlist[]; onInvalidate: () => void }) {
@@ -445,6 +527,21 @@ function PlaylistsSection({ adventureId, playlists, onInvalidate }: { adventureI
 
   const deleteTrack = useMutation({
     mutationFn: async (id: number) => { await fetch(`/api/playlists/tracks/${id}`, { method: 'DELETE' }); },
+    onSuccess: onInvalidate,
+  });
+
+  const reorderTracks = useMutation({
+    mutationFn: async (ordered: PlaylistTrack[]) => {
+      await Promise.all(
+        ordered.map((track, i) =>
+          fetch(`/api/playlists/tracks/${track.id}`, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ name: track.name, type: track.type, url: track.url, sortOrder: i }),
+          })
+        )
+      );
+    },
     onSuccess: onInvalidate,
   });
 
@@ -482,14 +579,11 @@ function PlaylistsSection({ adventureId, playlists, onInvalidate }: { adventureI
           </div>
           {expandedId === pl.id && (
             <div style={s.sceneDetail}>
-              {pl.tracks.map((track) => (
-                <div key={track.id} style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4, padding: '4px 8px', background: '#1a1a2e', borderRadius: 4 }}>
-                  <span style={{ fontSize: '0.75rem' }}>{track.type === 'youtube' ? '▶' : '🎵'}</span>
-                  <span style={{ flex: 1, fontSize: '0.875rem' }}>{track.name}</span>
-                  <span style={{ fontSize: '0.7rem', color: '#555', maxWidth: 180, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{track.url}</span>
-                  <button style={s.btnIcon} onClick={() => deleteTrack.mutate(track.id)}>✕</button>
-                </div>
-              ))}
+              <TrackList
+                tracks={pl.tracks}
+                onDelete={(id) => deleteTrack.mutate(id)}
+                onReorder={(ordered) => reorderTracks.mutate(ordered)}
+              />
               {addingTrackId === pl.id ? (
                 <AddTrackForm
                   playlistId={pl.id}

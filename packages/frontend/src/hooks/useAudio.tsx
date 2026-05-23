@@ -17,11 +17,14 @@ export interface Playlist {
   tracks: PlaylistTrack[];
 }
 
+export type PlayMode = 'sequential' | 'shuffle';
+
 interface AudioState {
   currentPlaylist: Playlist | null;
   currentTrackIndex: number;
   isPlaying: boolean;
   volume: number;
+  playMode: PlayMode;
 }
 
 interface AudioContextValue extends AudioState {
@@ -32,6 +35,7 @@ interface AudioContextValue extends AudioState {
   nextTrack: () => void;
   prevTrack: () => void;
   setVolume: (v: number) => void;
+  setPlayMode: (mode: PlayMode) => void;
 }
 
 const AudioCtx = createContext<AudioContextValue | null>(null);
@@ -66,12 +70,25 @@ function extractYouTubeId(url: string): string | null {
   return m ? m[1] : null;
 }
 
+function buildPlayOrder(trackCount: number, mode: PlayMode, startIndex: number): { order: number[]; pos: number } {
+  if (mode === 'sequential') {
+    return { order: Array.from({ length: trackCount }, (_, i) => i), pos: startIndex };
+  }
+  const rest = Array.from({ length: trackCount }, (_, i) => i).filter(i => i !== startIndex);
+  for (let i = rest.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [rest[i], rest[j]] = [rest[j], rest[i]];
+  }
+  return { order: [startIndex, ...rest], pos: 0 };
+}
+
 export function AudioProvider({ children }: { children: ReactNode }) {
   const [state, setState] = useState<AudioState>({
     currentPlaylist: null,
     currentTrackIndex: 0,
     isPlaying: false,
     volume: Number(localStorage.getItem('gma:audio:volume') ?? '30'),
+    playMode: (localStorage.getItem('gma:audio:playMode') as PlayMode | null) ?? 'sequential',
   });
 
   const stateRef = useRef(state);
@@ -84,12 +101,17 @@ export function AudioProvider({ children }: { children: ReactNode }) {
   // video to play as soon as the player becomes ready
   const pendingVideoRef = useRef<string | null>(null);
 
+  // play order: array of track indices; playPosRef is current position within it
+  const playOrderRef = useRef<number[]>([]);
+  const playPosRef = useRef<number>(0);
+
   function advanceTrack() {
-    const { currentPlaylist, currentTrackIndex } = stateRef.current;
+    const { currentPlaylist } = stateRef.current;
     if (!currentPlaylist) return;
-    const next = currentTrackIndex + 1;
-    if (next < currentPlaylist.tracks.length) {
-      playTrackInner(currentPlaylist, next);
+    const nextPos = playPosRef.current + 1;
+    if (nextPos < playOrderRef.current.length) {
+      playPosRef.current = nextPos;
+      playTrackInner(currentPlaylist, playOrderRef.current[nextPos]);
     } else {
       setState((s) => ({ ...s, isPlaying: false }));
     }
@@ -195,7 +217,10 @@ export function AudioProvider({ children }: { children: ReactNode }) {
 
   const playPlaylist = useCallback((playlist: Playlist, trackIndex = 0) => {
     if (playlist.tracks.length === 0) return;
-    playTrackInner(playlist, trackIndex);
+    const { order, pos } = buildPlayOrder(playlist.tracks.length, stateRef.current.playMode, trackIndex);
+    playOrderRef.current = order;
+    playPosRef.current = pos;
+    playTrackInner(playlist, order[pos]);
   }, []);
 
   const pause = useCallback(() => {
@@ -217,17 +242,23 @@ export function AudioProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const nextTrack = useCallback(() => {
-    const { currentPlaylist, currentTrackIndex } = stateRef.current;
+    const { currentPlaylist } = stateRef.current;
     if (!currentPlaylist) return;
-    const next = currentTrackIndex + 1;
-    if (next < currentPlaylist.tracks.length) playTrackInner(currentPlaylist, next);
+    const nextPos = playPosRef.current + 1;
+    if (nextPos < playOrderRef.current.length) {
+      playPosRef.current = nextPos;
+      playTrackInner(currentPlaylist, playOrderRef.current[nextPos]);
+    }
   }, []);
 
   const prevTrack = useCallback(() => {
-    const { currentPlaylist, currentTrackIndex } = stateRef.current;
+    const { currentPlaylist } = stateRef.current;
     if (!currentPlaylist) return;
-    const prev = currentTrackIndex - 1;
-    if (prev >= 0) playTrackInner(currentPlaylist, prev);
+    const prevPos = playPosRef.current - 1;
+    if (prevPos >= 0) {
+      playPosRef.current = prevPos;
+      playTrackInner(currentPlaylist, playOrderRef.current[prevPos]);
+    }
   }, []);
 
   const setVolume = useCallback((v: number) => {
@@ -237,8 +268,19 @@ export function AudioProvider({ children }: { children: ReactNode }) {
     setState((s) => ({ ...s, volume: v }));
   }, []);
 
+  const setPlayMode = useCallback((mode: PlayMode) => {
+    localStorage.setItem('gma:audio:playMode', mode);
+    const { currentPlaylist, currentTrackIndex } = stateRef.current;
+    if (currentPlaylist) {
+      const { order, pos } = buildPlayOrder(currentPlaylist.tracks.length, mode, currentTrackIndex);
+      playOrderRef.current = order;
+      playPosRef.current = pos;
+    }
+    setState((s) => ({ ...s, playMode: mode }));
+  }, []);
+
   return (
-    <AudioCtx.Provider value={{ ...state, playPlaylist, pause, resume, stop, nextTrack, prevTrack, setVolume }}>
+    <AudioCtx.Provider value={{ ...state, playPlaylist, pause, resume, stop, nextTrack, prevTrack, setVolume, setPlayMode }}>
       {children}
     </AudioCtx.Provider>
   );
