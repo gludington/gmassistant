@@ -6,7 +6,7 @@ export function AudioBar() {
     select: (s) => ({ currentPathname: s.location.pathname }),
   });
 
-  const { currentPlaylist, currentTrackIndex, isPlaying, volume, pause, resume, stop, nextTrack, prevTrack, setVolume } = useAudio();
+  const { currentPlaylist, currentTrackIndex, isPlaying, volume, playMode, pause, resume, stop, nextTrack, prevTrack, setVolume, setPlayMode } = useAudio();
 
   if (currentPathname === '/player') return null;
 
@@ -33,6 +33,13 @@ export function AudioBar() {
         )}
         <button style={{ ...btn, color: '#ef5350' }} onClick={stop} disabled={!currentPlaylist} title="Stop">⏹</button>
         <button style={btn} onClick={nextTrack} disabled={!currentPlaylist} title="Next track">⏭</button>
+        <button
+          style={{ ...btn, color: playMode === 'shuffle' ? '#c9a84c' : '#555', borderColor: playMode === 'shuffle' ? '#c9a84c' : '#333' }}
+          onClick={() => setPlayMode(playMode === 'shuffle' ? 'sequential' : 'shuffle')}
+          title={playMode === 'shuffle' ? 'Shuffle on — click for sequential' : 'Sequential — click for shuffle'}
+        >
+          🔀
+        </button>
       </div>
       <div style={volWrap}>
         <span style={volLabel}>🔊</span>
