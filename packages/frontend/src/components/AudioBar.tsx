@@ -6,19 +6,34 @@ export function AudioBar() {
     select: (s) => ({ currentPathname: s.location.pathname }),
   });
 
-  const { currentPlaylist, currentTrackIndex, isPlaying, volume, playMode, pause, resume, stop, nextTrack, prevTrack, setVolume, setPlayMode } = useAudio();
+  const { currentPlaylist, currentTrackIndex, isPlaying, volume, playMode, ytVisible, currentTime, duration, pause, resume, stop, nextTrack, prevTrack, setVolume, setPlayMode, setYtVisible, seekTo } = useAudio();
 
   if (currentPathname === '/player') return null;
 
   const track = currentPlaylist?.tracks[currentTrackIndex];
+  const pct = duration > 0 ? (currentTime / duration) * 100 : 0;
+
+  function handleProgressClick(e: React.MouseEvent<HTMLDivElement>) {
+    if (duration <= 0) return;
+    const rect = e.currentTarget.getBoundingClientRect();
+    seekTo(Math.max(0, Math.min(1, (e.clientX - rect.left) / rect.width)) * duration);
+  }
 
   return (
     <div style={bar}>
+      <div style={progressTrack} onClick={handleProgressClick}>
+        <div style={{ ...progressFill, width: `${pct}%` }} />
+      </div>
       <div style={left}>
         {currentPlaylist ? (
           <>
             <span style={playlistName}>{currentPlaylist.name}</span>
-            <span style={trackName}>{track?.name ?? '—'}</span>
+            <span style={trackName}>
+              {track?.name ?? '—'}
+              {duration > 0 && (
+                <span style={timeText}> · {fmt(currentTime)} / {fmt(duration)}</span>
+              )}
+            </span>
           </>
         ) : (
           <span style={idleText}>No audio playing</span>
@@ -40,6 +55,15 @@ export function AudioBar() {
         >
           🔀
         </button>
+        {track?.type === 'youtube' && (
+          <button
+            style={{ ...btn, color: ytVisible ? '#c9a84c' : '#555', borderColor: ytVisible ? '#c9a84c' : '#333' }}
+            onClick={() => setYtVisible(!ytVisible)}
+            title={ytVisible ? 'Hide video' : 'Show video'}
+          >
+            📺
+          </button>
+        )}
       </div>
       <div style={volWrap}>
         <span style={volLabel}>🔊</span>
@@ -55,6 +79,13 @@ export function AudioBar() {
       </div>
     </div>
   );
+}
+
+function fmt(s: number): string {
+  if (!isFinite(s) || s < 0) return '0:00';
+  const m = Math.floor(s / 60);
+  const sec = Math.floor(s % 60);
+  return `${m}:${sec.toString().padStart(2, '0')}`;
 }
 
 const bar: React.CSSProperties = {
@@ -118,3 +149,23 @@ const btn: React.CSSProperties = {
 
 const volWrap: React.CSSProperties = { display: 'flex', alignItems: 'center', gap: 6 };
 const volLabel: React.CSSProperties = { color: '#666', minWidth: 24, textAlign: 'center' };
+
+const progressTrack: React.CSSProperties = {
+  position: 'absolute',
+  top: 0, left: 0, right: 0,
+  height: 4,
+  background: '#1e1e35',
+  cursor: 'pointer',
+};
+
+const progressFill: React.CSSProperties = {
+  height: '100%',
+  background: '#c9a84c',
+  transition: 'width 0.5s linear',
+  pointerEvents: 'none',
+};
+
+const timeText: React.CSSProperties = {
+  color: '#666',
+  fontSize: '0.7rem',
+};

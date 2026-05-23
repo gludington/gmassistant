@@ -25,6 +25,9 @@ interface AudioState {
   isPlaying: boolean;
   volume: number;
   playMode: PlayMode;
+  ytVisible: boolean;
+  currentTime: number;
+  duration: number;
 }
 
 interface AudioContextValue extends AudioState {
@@ -36,6 +39,8 @@ interface AudioContextValue extends AudioState {
   prevTrack: () => void;
   setVolume: (v: number) => void;
   setPlayMode: (mode: PlayMode) => void;
+  setYtVisible: (v: boolean) => void;
+  seekTo: (t: number) => void;
 }
 
 const AudioCtx = createContext<AudioContextValue | null>(null);
@@ -57,6 +62,9 @@ interface YTPlayer {
   setVolume(v: number): void;
   destroy(): void;
   loadVideoById(id: string): void;
+  getCurrentTime(): number;
+  getDuration(): number;
+  seekTo(seconds: number, allowSeekAhead: boolean): void;
 }
 
 // Applies a quadratic curve so low slider values map to genuinely quiet levels.
@@ -89,6 +97,9 @@ export function AudioProvider({ children }: { children: ReactNode }) {
     isPlaying: false,
     volume: Number(localStorage.getItem('gma:audio:volume') ?? '30'),
     playMode: (localStorage.getItem('gma:audio:playMode') as PlayMode | null) ?? 'sequential',
+    ytVisible: false,
+    currentTime: 0,
+    duration: 0,
   });
 
   const stateRef = useRef(state);
@@ -100,6 +111,32 @@ export function AudioProvider({ children }: { children: ReactNode }) {
   const ytReadyRef = useRef(false);
   // video to play as soon as the player becomes ready
   const pendingVideoRef = useRef<string | null>(null);
+  // imperative container element for the YT iframe
+  const ytContainerRef = useRef<HTMLDivElement | null>(null);
+  // interval for polling playback position
+  const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
+
+  function startPoll() {
+    if (pollRef.current) return;
+    pollRef.current = setInterval(() => {
+      let currentTime = 0;
+      let duration = 0;
+      if (audioRef.current) {
+        currentTime = audioRef.current.currentTime;
+        duration = isFinite(audioRef.current.duration) ? audioRef.current.duration : 0;
+      } else if (ytPlayerRef.current && ytReadyRef.current) {
+        try {
+          currentTime = ytPlayerRef.current.getCurrentTime() ?? 0;
+          duration = ytPlayerRef.current.getDuration() ?? 0;
+        } catch {}
+      }
+      setState((s) => ({ ...s, currentTime, duration }));
+    }, 500);
+  }
+
+  function stopPoll() {
+    if (pollRef.current) { clearInterval(pollRef.current); pollRef.current = null; }
+  }
 
   // play order: array of track indices; playPosRef is current position within it
   const playOrderRef = useRef<number[]>([]);
@@ -125,26 +162,32 @@ export function AudioProvider({ children }: { children: ReactNode }) {
     if (pendingVideoRef.current && ytPlayerRef.current) {
       ytPlayerRef.current.loadVideoById(pendingVideoRef.current);
       pendingVideoRef.current = null;
+      startPoll();
     }
   }
 
   function onYtStateChange(e: { data: number }) {
     if (e.data === window.YT?.PlayerState?.ENDED) advanceTrack();
-    if (e.data === 1 /* PLAYING */) setState((s) => ({ ...s, isPlaying: true }));
-    if (e.data === 2 /* PAUSED */)  setState((s) => ({ ...s, isPlaying: false }));
+    if (e.data === 1 /* PLAYING */) { startPoll(); setState((s) => ({ ...s, isPlaying: true })); }
+    if (e.data === 2 /* PAUSED */)  { stopPoll();  setState((s) => ({ ...s, isPlaying: false })); }
   }
 
   useEffect(() => {
-    // Create container imperatively so React never reconciles it
-    const container = document.createElement('div');
-    Object.assign(container.style, {
-      position: 'fixed', bottom: '60px', right: '20px',
+    // Wrapper stays in the DOM (ytContainerRef); YT API replaces the inner
+    // target div with an iframe, so we must keep them separate.
+    const wrapper = document.createElement('div');
+    Object.assign(wrapper.style, {
+      position: 'fixed', bottom: '58px', right: '20px',
       width: '320px', height: '180px', zIndex: '2000',
       background: '#000', borderRadius: '6px',
       boxShadow: '0 4px 24px rgba(0,0,0,0.7)',
       overflow: 'hidden',
+      display: 'none',
     });
-    document.body.appendChild(container);
+    const container = document.createElement('div');
+    wrapper.appendChild(container);
+    document.body.appendChild(wrapper);
+    ytContainerRef.current = wrapper;
 
     function createPlayer() {
       if (ytPlayerRef.current) return;
@@ -174,11 +217,13 @@ export function AudioProvider({ children }: { children: ReactNode }) {
     return () => {
       if (ytPlayerRef.current) { ytPlayerRef.current.destroy(); ytPlayerRef.current = null; }
       ytReadyRef.current = false;
-      if (document.body.contains(container)) document.body.removeChild(container);
+      ytContainerRef.current = null;
+      if (document.body.contains(wrapper)) document.body.removeChild(wrapper);
     };
   }, []);
 
   function stopAudio() {
+    stopPoll();
     if (audioRef.current) {
       audioRef.current.pause();
       audioRef.current.src = '';
@@ -201,16 +246,21 @@ export function AudioProvider({ children }: { children: ReactNode }) {
       if (ytReadyRef.current && ytPlayerRef.current) {
         ytPlayerRef.current.setVolume(curveVolume(stateRef.current.volume));
         ytPlayerRef.current.loadVideoById(videoId);
+        startPoll();
       } else {
         // Player not ready yet — play as soon as onReady fires
         pendingVideoRef.current = videoId;
       }
     } else {
+      // Hide the YouTube panel when switching to a file track
+      if (ytContainerRef.current) ytContainerRef.current.style.display = 'none';
+      setState((s) => ({ ...s, ytVisible: false }));
       const audio = new Audio(track.url);
       audio.volume = stateRef.current.volume / 100;
       audio.play().catch(() => {});
       audio.onended = () => advanceTrack();
       audioRef.current = audio;
+      startPoll();
       setState((s) => ({ ...s, isPlaying: true }));
     }
   }
@@ -227,19 +277,21 @@ export function AudioProvider({ children }: { children: ReactNode }) {
   const pause = useCallback(() => {
     if (audioRef.current) audioRef.current.pause();
     if (ytPlayerRef.current && ytReadyRef.current) { try { ytPlayerRef.current.pauseVideo(); } catch {} }
+    stopPoll();
     setState((s) => ({ ...s, isPlaying: false }));
   }, []);
 
   const resume = useCallback(() => {
     if (audioRef.current) { audioRef.current.play().catch(() => {}); }
     if (ytPlayerRef.current && ytReadyRef.current) { try { ytPlayerRef.current.playVideo(); } catch {} }
+    startPoll();
     setState((s) => ({ ...s, isPlaying: true }));
   }, []);
 
   const stop = useCallback(() => {
     stopAudio();
     pendingVideoRef.current = null;
-    setState((s) => ({ ...s, isPlaying: false, currentPlaylist: null }));
+    setState((s) => ({ ...s, isPlaying: false, currentPlaylist: null, currentTime: 0, duration: 0 }));
   }, []);
 
   const nextTrack = useCallback(() => {
@@ -269,6 +321,19 @@ export function AudioProvider({ children }: { children: ReactNode }) {
     setState((s) => ({ ...s, volume: v }));
   }, []);
 
+  const seekTo = useCallback((t: number) => {
+    if (audioRef.current) audioRef.current.currentTime = t;
+    if (ytPlayerRef.current && ytReadyRef.current) { try { ytPlayerRef.current.seekTo(t, true); } catch {} }
+    setState((s) => ({ ...s, currentTime: t }));
+  }, []);
+
+  const setYtVisible = useCallback((v: boolean) => {
+    if (ytContainerRef.current) {
+      ytContainerRef.current.style.display = v ? 'block' : 'none';
+    }
+    setState((s) => ({ ...s, ytVisible: v }));
+  }, []);
+
   const setPlayMode = useCallback((mode: PlayMode) => {
     localStorage.setItem('gma:audio:playMode', mode);
     const { currentPlaylist, currentTrackIndex } = stateRef.current;
@@ -281,7 +346,7 @@ export function AudioProvider({ children }: { children: ReactNode }) {
   }, []);
 
   return (
-    <AudioCtx.Provider value={{ ...state, playPlaylist, pause, resume, stop, nextTrack, prevTrack, setVolume, setPlayMode }}>
+    <AudioCtx.Provider value={{ ...state, playPlaylist, pause, resume, stop, nextTrack, prevTrack, setVolume, setPlayMode, setYtVisible, seekTo }}>
       {children}
     </AudioCtx.Provider>
   );
