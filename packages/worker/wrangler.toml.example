@@ -9,9 +9,9 @@ watch_dir = ["../backend/src"]
 
 [[d1_databases]]
 binding = "DB"
-database_name = "gmassisstant"
-database_id = ""   # fill in after: wrangler d1 create gmassisstant
+database_name = "${CF_D1_DATABASE_NAME}"
+database_id = "${CF_D1_DATABASE_ID}"
 
 [[r2_buckets]]
 binding = "UPLOADS"
-bucket_name = "gmassisstant-uploads"
+bucket_name = "${CF_R2_BUCKET_NAME}"
