@@ -18,6 +18,10 @@
     "wait-on": "^8.0.0"
   },
   "pnpm": {
-    "onlyBuiltDependencies": ["esbuild", "electron"]
+    "onlyBuiltDependencies": [
+      "esbuild",
+      "electron",
+      "workerd"
+    ]
   }
 }

@@ -1,11 +1,13 @@
 import { Hono } from 'hono';
-import { writeFile, mkdir } from 'node:fs/promises';
-import { join } from 'node:path';
-import { randomUUID } from 'node:crypto';
+import type { AppVariables } from '../types.js';
 
-const router = new Hono();
+const router = new Hono<{ Variables: AppVariables }>();
 
-const UPLOADS_DIR = process.env.UPLOADS_BASE_DIR ?? join(process.cwd(), 'uploads');
+const IMAGE_EXTS = ['jpg', 'jpeg', 'png', 'gif', 'webp', 'avif'];
+const IMAGE_MIME: Record<string, string> = {
+  jpg: 'image/jpeg', jpeg: 'image/jpeg', png: 'image/png',
+  gif: 'image/gif', webp: 'image/webp', avif: 'image/avif',
+};
 
 router.post('/', async (c) => {
   const body = await c.req.parseBody();
@@ -16,15 +18,13 @@ router.post('/', async (c) => {
   }
 
   const ext = (file.name.split('.').pop() ?? 'bin').toLowerCase();
-  if (!['jpg', 'jpeg', 'png', 'gif', 'webp', 'avif'].includes(ext)) {
+  if (!IMAGE_EXTS.includes(ext)) {
     return c.json({ error: 'Unsupported file type' }, 400);
   }
 
-  await mkdir(UPLOADS_DIR, { recursive: true });
-
-  const filename = `${randomUUID()}.${ext}`;
+  const filename = `${crypto.randomUUID()}.${ext}`;
   const buffer = await file.arrayBuffer();
-  await writeFile(join(UPLOADS_DIR, filename), Buffer.from(buffer));
+  await c.var.storage.put(filename, buffer, IMAGE_MIME[ext] ?? 'application/octet-stream');
 
   return c.json({ url: `/uploads/${filename}` }, 201);
 });

@@ -2,17 +2,19 @@ import { Hono } from 'hono';
 import { zValidator } from '@hono/zod-validator';
 import { z } from 'zod';
 import { eq, inArray } from 'drizzle-orm';
-import { db } from '../db/index.js';
+import type { AppVariables } from '../types.js';
 import { adventures, imageScenes, sceneImages, encounters, combatants, adventurePlayers, groupMembers, playlists, playlistTracks } from '../db/schema.js';
 
-const router = new Hono();
+const router = new Hono<{ Variables: AppVariables }>();
 
 router.get('/', async (c) => {
+  const db = c.var.db;
   const all = await db.select().from(adventures).orderBy(adventures.name);
   return c.json(all);
 });
 
 router.get('/:id', async (c) => {
+  const db = c.var.db;
   const id = Number(c.req.param('id'));
   const [adventure] = await db.select().from(adventures).where(eq(adventures.id, id));
   if (!adventure) return c.json({ error: 'Not found' }, 404);
@@ -29,16 +31,16 @@ router.get('/:id', async (c) => {
   const encountersWithCombatants = await Promise.all(
     encounterList.map(async (encounter) => {
       const combatantList = await db.select().from(combatants).where(eq(combatants.encounterId, encounter.id));
-      const groupIds = combatantList.filter((c) => c.type === 'group').map((c) => c.id);
+      const groupIds = combatantList.filter((x) => x.type === 'group').map((x) => x.id);
       const memberRows = groupIds.length > 0
         ? await db.select().from(groupMembers).where(inArray(groupMembers.combatantId, groupIds))
         : [];
       return {
         ...encounter,
-        combatants: combatantList.map((c) =>
-          c.type === 'group'
-            ? { ...c, members: memberRows.filter((m) => m.combatantId === c.id) }
-            : c
+        combatants: combatantList.map((x) =>
+          x.type === 'group'
+            ? { ...x, members: memberRows.filter((m) => m.combatantId === x.id) }
+            : x
         ),
       };
     })
@@ -65,6 +67,7 @@ const adventureSchema = z.object({
 });
 
 router.post('/', zValidator('json', adventureSchema), async (c) => {
+  const db = c.var.db;
   const data = c.req.valid('json');
   const [created] = await db.insert(adventures).values({
     name: data.name,
@@ -76,6 +79,7 @@ router.post('/', zValidator('json', adventureSchema), async (c) => {
 });
 
 router.put('/:id', zValidator('json', adventureSchema), async (c) => {
+  const db = c.var.db;
   const id = Number(c.req.param('id'));
   const data = c.req.valid('json');
   const [updated] = await db.update(adventures)
@@ -87,6 +91,7 @@ router.put('/:id', zValidator('json', adventureSchema), async (c) => {
 });
 
 router.patch('/:id', zValidator('json', adventureSchema.partial()), async (c) => {
+  const db = c.var.db;
   const id = Number(c.req.param('id'));
   const data = c.req.valid('json');
   const [updated] = await db.update(adventures)
@@ -98,6 +103,7 @@ router.patch('/:id', zValidator('json', adventureSchema.partial()), async (c) =>
 });
 
 router.delete('/:id', async (c) => {
+  const db = c.var.db;
   const id = Number(c.req.param('id'));
   await db.delete(adventures).where(eq(adventures.id, id));
   return c.body(null, 204);
@@ -112,12 +118,14 @@ const sceneSchema = z.object({
 });
 
 router.post('/scenes', zValidator('json', sceneSchema), async (c) => {
+  const db = c.var.db;
   const data = c.req.valid('json');
   const [created] = await db.insert(imageScenes).values(data).returning();
   return c.json(created, 201);
 });
 
 router.delete('/scenes/:sceneId', async (c) => {
+  const db = c.var.db;
   const sceneId = Number(c.req.param('sceneId'));
   await db.delete(imageScenes).where(eq(imageScenes.id, sceneId));
   return c.body(null, 204);
@@ -131,12 +139,14 @@ const sceneImageSchema = z.object({
 });
 
 router.post('/scenes/images', zValidator('json', sceneImageSchema), async (c) => {
+  const db = c.var.db;
   const data = c.req.valid('json');
   const [created] = await db.insert(sceneImages).values(data).returning();
   return c.json(created, 201);
 });
 
 router.put('/scenes/images/:imageId', zValidator('json', z.object({ sortOrder: z.number().int() })), async (c) => {
+  const db = c.var.db;
   const imageId = Number(c.req.param('imageId'));
   const { sortOrder } = c.req.valid('json');
   const [updated] = await db.update(sceneImages).set({ sortOrder }).where(eq(sceneImages.id, imageId)).returning();
@@ -148,6 +158,7 @@ router.patch('/scenes/images/:imageId', zValidator('json', z.object({
   fit: z.enum(['cover', 'fit', 'center']).optional(),
   playlistId: z.number().int().nullable().optional(),
 })), async (c) => {
+  const db = c.var.db;
   const imageId = Number(c.req.param('imageId'));
   const data = c.req.valid('json');
   const [updated] = await db.update(sceneImages).set(data).where(eq(sceneImages.id, imageId)).returning();
@@ -156,6 +167,7 @@ router.patch('/scenes/images/:imageId', zValidator('json', z.object({
 });
 
 router.delete('/scenes/images/:imageId', async (c) => {
+  const db = c.var.db;
   const imageId = Number(c.req.param('imageId'));
   await db.delete(sceneImages).where(eq(sceneImages.id, imageId));
   return c.body(null, 204);
@@ -175,6 +187,7 @@ const playerSchema = z.object({
 });
 
 router.post('/players', zValidator('json', playerSchema), async (c) => {
+  const db = c.var.db;
   const data = c.req.valid('json');
   const [created] = await db.insert(adventurePlayers).values({
     ...data,
@@ -187,6 +200,7 @@ router.post('/players', zValidator('json', playerSchema), async (c) => {
 });
 
 router.put('/players/:id', zValidator('json', playerSchema.partial().omit({ adventureId: true })), async (c) => {
+  const db = c.var.db;
   const id = Number(c.req.param('id'));
   const data = c.req.valid('json');
   const [updated] = await db.update(adventurePlayers)
@@ -198,6 +212,7 @@ router.put('/players/:id', zValidator('json', playerSchema.partial().omit({ adve
 });
 
 router.delete('/players/:id', async (c) => {
+  const db = c.var.db;
   const id = Number(c.req.param('id'));
   await db.delete(adventurePlayers).where(eq(adventurePlayers.id, id));
   return c.body(null, 204);
