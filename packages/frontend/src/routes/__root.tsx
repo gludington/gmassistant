@@ -9,10 +9,13 @@ export const Route = createRootRoute({
 function Root() {
   const { location } = useRouterState();
   const isPlayer = location.pathname === '/player';
+  if (isPlayer) {
+    return <Outlet />;
+  }
   return (
     <AudioProvider>
       <Outlet />
-      {!isPlayer && <AudioBar />}
+      <AudioBar />
     </AudioProvider>
   );
 }
