@@ -116,9 +116,8 @@ export function AudioProvider({ children }: { children: ReactNode }) {
     // Create container imperatively so React never reconciles it
     const container = document.createElement('div');
     Object.assign(container.style, {
-      position: 'fixed', bottom: '60px', right: '20px',
-      width: '320px', height: '180px', zIndex: '2000',
-      border: '2px solid red', background: '#000',
+      position: 'fixed', left: '-9999px', top: '-9999px',
+      width: '320px', height: '180px', pointerEvents: 'none',
     });
     document.body.appendChild(container);
 
