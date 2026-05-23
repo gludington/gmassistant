@@ -8,6 +8,7 @@ export function GmHeader({ children, wrap }: { children: ReactNode; wrap?: boole
         <img src="/logo.png" alt="GM Assistant" style={logo} />
       </Link>
       {children}
+      <Link to="/help" style={helpLink} title="Help">?</Link>
     </header>
   );
 }
@@ -32,4 +33,22 @@ const logo: React.CSSProperties = {
   width: 36,
   borderRadius: 6,
   objectFit: 'contain',
+};
+
+const helpLink: React.CSSProperties = {
+  marginLeft: 'auto',
+  flexShrink: 0,
+  width: 28,
+  height: 28,
+  borderRadius: '50%',
+  border: '1px solid #3a3a5a',
+  background: 'transparent',
+  color: '#888',
+  fontSize: '0.95rem',
+  fontWeight: 700,
+  display: 'flex',
+  alignItems: 'center',
+  justifyContent: 'center',
+  textDecoration: 'none',
+  lineHeight: 1,
 };
