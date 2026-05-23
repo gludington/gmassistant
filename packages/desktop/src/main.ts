@@ -57,9 +57,15 @@ async function startBackend(): Promise<number> {
 }
 
 async function createWindow(port: number) {
+  const iconPath = isDev
+    ? join(__dirname, '../../assets/icon.png')
+    : join(process.resourcesPath, 'icon.png');
+
   const win = new BrowserWindow({
     width: 1440,
     height: 900,
+    icon: iconPath,
+    title: 'GM Assistant',
     webPreferences: {
       preload: join(__dirname, 'preload.js'),
       contextIsolation: true,
