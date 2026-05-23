@@ -50,6 +50,17 @@ export function PlaylistDrawer({
     onSuccess: invalidate,
   });
 
+  const setPlayMode = useMutation({
+    mutationFn: async ({ id, playMode }: { id: number; playMode: 'sequential' | 'shuffle' }) => {
+      await fetch(`/api/playlists/${id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ playMode }),
+      });
+    },
+    onSuccess: invalidate,
+  });
+
   const deleteTrack = useMutation({
     mutationFn: async (id: number) => { await fetch(`/api/playlists/tracks/${id}`, { method: 'DELETE' }); },
     onSuccess: invalidate,
@@ -124,6 +135,11 @@ export function PlaylistDrawer({
                   </span>
                 </div>
                 <div style={s.cardActions}>
+                  <button
+                    style={{ ...s.modeBtn, color: pl.playMode === 'shuffle' ? '#c9a84c' : '#555' }}
+                    onClick={() => setPlayMode.mutate({ id: pl.id, playMode: pl.playMode === 'shuffle' ? 'sequential' : 'shuffle' })}
+                    title={pl.playMode === 'shuffle' ? 'Shuffle (click for sequential)' : 'Sequential (click for shuffle)'}
+                  >{pl.playMode === 'shuffle' ? '🔀' : '↕'}</button>
                   {pl.tracks.length > 0 && (
                     <button
                       style={{ ...s.iconBtn, color: isPlaying ? '#c9a84c' : '#aaa' }}
@@ -453,6 +469,15 @@ const s: Record<string, React.CSSProperties> = {
     borderRadius: 3,
     lineHeight: 1,
     color: '#666',
+  },
+  modeBtn: {
+    background: 'none',
+    border: 'none',
+    cursor: 'pointer',
+    fontSize: '0.8rem',
+    padding: '4px 5px',
+    borderRadius: 3,
+    lineHeight: 1,
   },
   trackSection: {
     padding: '0 10px 10px',

@@ -76,6 +76,7 @@ CREATE TABLE `playlists` (
 	`adventure_id` integer NOT NULL,
 	`name` text NOT NULL,
 	`sort_order` integer DEFAULT 0 NOT NULL,
+	`play_mode` text DEFAULT 'sequential' NOT NULL,
 	FOREIGN KEY (`adventure_id`) REFERENCES `adventures`(`id`) ON UPDATE no action ON DELETE cascade
 );
 --> statement-breakpoint
