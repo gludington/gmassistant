@@ -6,11 +6,15 @@ import { serve } from '@hono/node-server';
 import { migrate } from 'drizzle-orm/libsql/migrator';
 
 // Set data paths before any backend module initialises
+const isDev = !electronApp.isPackaged;
 const userData = electronApp.getPath('userData');
 process.env.DATABASE_URL = `file:${join(userData, 'gmassisstant.db')}`;
 process.env.UPLOADS_BASE_DIR = join(userData, 'uploads');
-
-const isDev = !electronApp.isPackaged;
+if (!isDev) {
+  // Tells the backend to serve the pre-built frontend over HTTP so history
+  // routing works and all requests share one origin (no file:// mismatch).
+  process.env.ELECTRON_FRONTEND_DIR = join(process.resourcesPath, 'frontend');
+}
 
 function getFreePort(): Promise<number> {
   return new Promise((resolve, reject) => {
@@ -79,7 +83,7 @@ async function createWindow(port: number) {
     await win.loadURL('http://localhost:5173');
     win.webContents.openDevTools();
   } else {
-    await win.loadFile(join(process.resourcesPath, 'frontend', 'index.html'));
+    await win.loadURL(`http://localhost:${port}/`);
   }
 
   return win;
@@ -88,15 +92,20 @@ async function createWindow(port: number) {
 electronApp.whenReady().then(async () => {
   try {
     session.defaultSession.webRequest.onHeadersReceived((details, callback) => {
-      callback({
-        responseHeaders: {
-          ...details.responseHeaders,
-          'Content-Security-Policy': [
-            "default-src 'self' 'unsafe-inline' 'unsafe-eval' https: data: blob:; " +
-              'frame-src https://www.youtube.com https://www.youtube-nocookie.com;',
-          ],
-        },
-      });
+      const host = new URL(details.url).hostname;
+      if (host === 'localhost' || host === '127.0.0.1') {
+        callback({
+          responseHeaders: {
+            ...details.responseHeaders,
+            'Content-Security-Policy': [
+              "default-src 'self' 'unsafe-inline' 'unsafe-eval' https: data: blob:; " +
+                'frame-src https://www.youtube.com https://www.youtube-nocookie.com;',
+            ],
+          },
+        });
+      } else {
+        callback({ responseHeaders: details.responseHeaders });
+      }
     });
 
     const port = await startBackend();
