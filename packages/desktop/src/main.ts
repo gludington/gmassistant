@@ -1,5 +1,5 @@
-import { app as electronApp, BrowserWindow, dialog, protocol, net, session } from 'electron';
-import { join, dirname } from 'node:path';
+import { app as electronApp, BrowserWindow, dialog, session } from 'electron';
+import { join } from 'node:path';
 import { createServer } from 'node:net';
 import type { AddressInfo } from 'node:net';
 import { serve } from '@hono/node-server';
@@ -11,8 +11,8 @@ const userData = electronApp.getPath('userData');
 process.env.DATABASE_URL = `file:${join(userData, 'gmassisstant.db')}`;
 process.env.UPLOADS_BASE_DIR = join(userData, 'uploads');
 if (!isDev) {
-  // Tells the backend to serve the pre-built frontend over HTTP so history
-  // routing works and all requests share one origin (no file:// mismatch).
+  // Backend serves the pre-built frontend so all traffic (HTML, assets, API)
+  // shares one HTTP origin — history routing works, no file:// mismatch.
   process.env.ELECTRON_FRONTEND_DIR = join(process.resourcesPath, 'frontend');
 }
 
@@ -51,24 +51,6 @@ async function startBackend(): Promise<number> {
   return port;
 }
 
-function registerProtocolInterceptor(port: number) {
-  protocol.handle('http', (request) => {
-    const url = new URL(request.url);
-    if (
-      url.hostname === 'localhost' &&
-      (url.pathname.startsWith('/api') || url.pathname.startsWith('/uploads'))
-    ) {
-      const target = `http://127.0.0.1:${port}${url.pathname}${url.search}`;
-      return net.fetch(target, {
-        method: request.method,
-        headers: request.headers,
-        body: request.body ?? undefined,
-      } as Parameters<typeof net.fetch>[1]);
-    }
-    return net.fetch(request);
-  });
-}
-
 async function createWindow(port: number) {
   const win = new BrowserWindow({
     width: 1440,
@@ -83,7 +65,10 @@ async function createWindow(port: number) {
     await win.loadURL('http://localhost:5173');
     win.webContents.openDevTools();
   } else {
-    await win.loadURL(`http://localhost:${port}/`);
+    // Use 127.0.0.1 directly — avoids localhost DNS ambiguity (IPv4 vs IPv6)
+    // and bypasses the need for a protocol interceptor entirely, since Hono
+    // now serves the frontend, API, and uploads all from the same origin.
+    await win.loadURL(`http://127.0.0.1:${port}/`);
   }
 
   return win;
@@ -109,11 +94,6 @@ electronApp.whenReady().then(async () => {
     });
 
     const port = await startBackend();
-
-    if (!isDev) {
-      registerProtocolInterceptor(port);
-    }
-
     await createWindow(port);
 
     electronApp.on('activate', async () => {
