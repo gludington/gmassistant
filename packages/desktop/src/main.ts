@@ -1,4 +1,4 @@
-import { app as electronApp, BrowserWindow, dialog, ipcMain, session } from 'electron';
+import { app as electronApp, BrowserWindow, dialog, ipcMain, Menu, session } from 'electron';
 import { join } from 'node:path';
 import { createServer } from 'node:net';
 import type { AddressInfo } from 'node:net';
@@ -73,6 +73,8 @@ async function createWindow(port: number) {
 
   return win;
 }
+
+Menu.setApplicationMenu(null);
 
 ipcMain.on('set-fullscreen', (event, flag: boolean) => {
   BrowserWindow.fromWebContents(event.sender)?.setFullScreen(flag);
