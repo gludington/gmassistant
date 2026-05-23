@@ -5,6 +5,11 @@ import type { AddressInfo } from 'node:net';
 import { serve } from '@hono/node-server';
 import { migrate } from 'drizzle-orm/libsql/migrator';
 
+// Allow YouTube iframe to autoplay when triggered programmatically — without
+// this, Chromium blocks playback because the gesture is in the main frame,
+// not the cross-origin iframe, so YouTube sees no user gesture.
+electronApp.commandLine.appendSwitch('autoplay-policy', 'no-user-gesture-required');
+
 // Set data paths before any backend module initialises
 const isDev = !electronApp.isPackaged;
 const userData = electronApp.getPath('userData');
