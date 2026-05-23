@@ -10,7 +10,7 @@ import { playlists, playlistTracks } from '../db/schema.js';
 
 const router = new Hono();
 
-const UPLOADS_DIR = join(process.cwd(), 'uploads');
+const UPLOADS_DIR = process.env.UPLOADS_BASE_DIR ?? join(process.cwd(), 'uploads');
 
 // ── Playlists ─────────────────────────────────────────────────────────────────
 
