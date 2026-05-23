@@ -2,12 +2,13 @@ import { Hono } from 'hono';
 import { zValidator } from '@hono/zod-validator';
 import { z } from 'zod';
 import { eq, inArray } from 'drizzle-orm';
-import { db } from '../db/index.js';
+import type { AppVariables } from '../types.js';
 import { encounters, combatants, adventures, adventurePlayers, groupMembers } from '../db/schema.js';
 
-const router = new Hono();
+const router = new Hono<{ Variables: AppVariables }>();
 
 router.get('/', async (c) => {
+  const db = c.var.db;
   const adventureId = c.req.query('adventureId');
   const rows = adventureId
     ? await db.select().from(encounters).where(eq(encounters.adventureId, Number(adventureId)))
@@ -16,6 +17,7 @@ router.get('/', async (c) => {
 });
 
 router.get('/:id', async (c) => {
+  const db = c.var.db;
   const id = Number(c.req.param('id'));
   const [encounter] = await db.select().from(encounters).where(eq(encounters.id, id));
   if (!encounter) return c.json({ error: 'Not found' }, 404);
@@ -23,19 +25,17 @@ router.get('/:id', async (c) => {
   const combatantList = await db.select().from(combatants).where(eq(combatants.encounterId, id));
   const players = await db.select().from(adventurePlayers).where(eq(adventurePlayers.adventureId, encounter.adventureId));
 
-  // Fetch group members for any group-type combatants
-  const groupIds = combatantList.filter((c) => c.type === 'group').map((c) => c.id);
+  const groupIds = combatantList.filter((x) => x.type === 'group').map((x) => x.id);
   const memberRows = groupIds.length > 0
     ? await db.select().from(groupMembers).where(inArray(groupMembers.combatantId, groupIds))
     : [];
 
-  const combatantListWithMembers = combatantList.map((c) =>
-    c.type === 'group'
-      ? { ...c, members: memberRows.filter((m) => m.combatantId === c.id) }
-      : c
+  const combatantListWithMembers = combatantList.map((x) =>
+    x.type === 'group'
+      ? { ...x, members: memberRows.filter((m) => m.combatantId === x.id) }
+      : x
   );
 
-  // Merge players in as combatants using negative IDs to avoid collision with encounter combatant IDs
   const playerCombatants = players.map((p) => ({
     id: -p.id,
     encounterId: id,
@@ -59,6 +59,7 @@ const encounterSchema = z.object({
 });
 
 router.post('/', zValidator('json', encounterSchema), async (c) => {
+  const db = c.var.db;
   const data = c.req.valid('json');
   const [created] = await db.insert(encounters).values({
     adventureId: data.adventureId,
@@ -69,6 +70,7 @@ router.post('/', zValidator('json', encounterSchema), async (c) => {
 });
 
 router.put('/:id', zValidator('json', encounterSchema.partial().omit({ adventureId: true })), async (c) => {
+  const db = c.var.db;
   const id = Number(c.req.param('id'));
   const data = c.req.valid('json');
   const [updated] = await db.update(encounters)
@@ -80,6 +82,7 @@ router.put('/:id', zValidator('json', encounterSchema.partial().omit({ adventure
 });
 
 router.patch('/:id', zValidator('json', z.object({ playlistId: z.number().int().nullable() })), async (c) => {
+  const db = c.var.db;
   const id = Number(c.req.param('id'));
   const { playlistId } = c.req.valid('json');
   const [updated] = await db.update(encounters).set({ playlistId }).where(eq(encounters.id, id)).returning();
@@ -88,6 +91,7 @@ router.patch('/:id', zValidator('json', z.object({ playlistId: z.number().int().
 });
 
 router.delete('/:id', async (c) => {
+  const db = c.var.db;
   const id = Number(c.req.param('id'));
   await db.delete(encounters).where(eq(encounters.id, id));
   return c.body(null, 204);
@@ -109,9 +113,9 @@ const combatantSchema = z.object({
 });
 
 router.post('/combatants', zValidator('json', combatantSchema), async (c) => {
+  const db = c.var.db;
   const data = c.req.valid('json');
 
-  // For group type, compute maxHp from members
   let computedMaxHp = data.maxHp;
   if (data.type === 'group' && data.members && data.members.length > 0) {
     computedMaxHp = data.members.reduce((sum, m) => sum + m.maxHp, 0);
@@ -141,6 +145,7 @@ router.post('/combatants', zValidator('json', combatantSchema), async (c) => {
 });
 
 router.put('/combatants/:id', zValidator('json', combatantSchema.partial().omit({ encounterId: true })), async (c) => {
+  const db = c.var.db;
   const id = Number(c.req.param('id'));
   const data = c.req.valid('json');
   const { members, ...fields } = data;
@@ -161,6 +166,7 @@ router.put('/combatants/:id', zValidator('json', combatantSchema.partial().omit(
 });
 
 router.delete('/combatants/:id', async (c) => {
+  const db = c.var.db;
   const id = Number(c.req.param('id'));
   await db.delete(combatants).where(eq(combatants.id, id));
   return c.body(null, 204);
@@ -175,12 +181,14 @@ const groupMemberSchema = z.object({
 });
 
 router.post('/combatants/group-members', zValidator('json', groupMemberSchema), async (c) => {
+  const db = c.var.db;
   const data = c.req.valid('json');
   const [created] = await db.insert(groupMembers).values(data).returning();
   return c.json(created, 201);
 });
 
 router.put('/combatants/group-members/:id', zValidator('json', groupMemberSchema.partial()), async (c) => {
+  const db = c.var.db;
   const id = Number(c.req.param('id'));
   const data = c.req.valid('json');
   const [updated] = await db.update(groupMembers).set(data).where(eq(groupMembers.id, id)).returning();
@@ -189,6 +197,7 @@ router.put('/combatants/group-members/:id', zValidator('json', groupMemberSchema
 });
 
 router.delete('/combatants/group-members/:id', async (c) => {
+  const db = c.var.db;
   const id = Number(c.req.param('id'));
   await db.delete(groupMembers).where(eq(groupMembers.id, id));
   return c.body(null, 204);

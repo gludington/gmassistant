@@ -5,7 +5,10 @@
   "type": "module",
   "exports": {
     ".": { "types": "./dist/index.d.ts", "default": "./dist/index.js" },
-    "./db": { "types": "./dist/db/index.d.ts", "default": "./dist/db/index.js" }
+    "./app": { "types": "./dist/app.d.ts", "default": "./dist/app.js" },
+    "./db": { "types": "./dist/db/index.d.ts", "default": "./dist/db/index.js" },
+    "./db/schema": { "types": "./dist/db/schema.d.ts", "default": "./dist/db/schema.js" },
+    "./storage/types": { "types": "./dist/storage/types.d.ts", "default": "./dist/storage/types.js" }
   },
   "scripts": {
     "dev": "tsx watch src/index.ts",

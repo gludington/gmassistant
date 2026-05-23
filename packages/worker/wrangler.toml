@@ -1,0 +1,17 @@
+name = "gmassisstant-api"
+main = "src/index.ts"
+compatibility_date = "2024-09-23"
+
+[build]
+# Ensure backend dist is up-to-date before bundling
+command = "pnpm --filter @gmassisstant/backend build"
+watch_dir = ["../backend/src"]
+
+[[d1_databases]]
+binding = "DB"
+database_name = "gmassisstant"
+database_id = ""   # fill in after: wrangler d1 create gmassisstant
+
+[[r2_buckets]]
+binding = "UPLOADS"
+bucket_name = "gmassisstant-uploads"

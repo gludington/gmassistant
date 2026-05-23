@@ -1,0 +1,23 @@
+{
+  "name": "@gmassisstant/worker",
+  "version": "0.0.1",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "wrangler dev",
+    "deploy": "wrangler deploy",
+    "db:migrate": "wrangler d1 migrations apply gmassisstant",
+    "db:migrate:local": "wrangler d1 migrations apply gmassisstant --local"
+  },
+  "dependencies": {
+    "@gmassisstant/backend": "workspace:*",
+    "drizzle-orm": "^0.38.0",
+    "hono": "^4.6.0"
+  },
+  "devDependencies": {
+    "@cloudflare/workers-types": "^4.0.0",
+    "drizzle-kit": "^0.29.0",
+    "typescript": "^5.0.0",
+    "wrangler": "^3.0.0"
+  }
+}
