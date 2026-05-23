@@ -24,6 +24,7 @@ A D&D tabletop session assistant for Game Masters. Manage adventures, encounters
 | Frontend | React 18, Vite 5, TanStack Router v1, TanStack Query v5 |
 | Backend | Hono v4, Drizzle ORM, LibSQL (SQLite) |
 | Desktop | Electron 31, electron-builder |
+| Cloudflare | Worker (API), Pages (frontend), D1 (database), R2 (uploads) |
 | Monorepo | pnpm workspaces |
 | Shared types | `@gmassisstant/types` |
 
@@ -31,13 +32,16 @@ A D&D tabletop session assistant for Game Masters. Manage adventures, encounters
 
 ```
 packages/
-  backend/   — Hono API server + Drizzle schema
-  frontend/  — React SPA
+  backend/   — Hono API server + Drizzle schema (platform-agnostic)
+  frontend/  — React SPA + Cloudflare Pages Functions proxy
   desktop/   — Electron wrapper
+  worker/    — Cloudflare Worker entrypoint (D1 + R2)
   types/     — Shared TypeScript types
 ```
 
-## Getting Started
+---
+
+## Local Development
 
 ### Prerequisites
 
@@ -57,25 +61,13 @@ cd packages/backend
 pnpm db:push
 ```
 
-### Run (development)
-
-From the repo root:
+### Run
 
 ```bash
 pnpm dev
 ```
 
-Or start each package separately:
-
-```bash
-# Terminal 1
-cd packages/backend && pnpm dev
-
-# Terminal 2
-cd packages/frontend && pnpm dev
-```
-
-The frontend dev server proxies `/api` requests to the backend.
+This starts the backend (port 3000) and frontend dev server (port 5173) concurrently. The frontend proxies `/api` and `/uploads` to the backend.
 
 ### Routes
 
@@ -87,12 +79,143 @@ The frontend dev server proxies `/api` requests to the backend.
 | `/player` | Player-facing screen — open in a separate window |
 | `/help` | In-app help reference |
 
-## Player Screen
+---
 
-Open the player screen from any GM page ("Open Player Screen" button). Move it to your TV or secondary monitor. The DM view syncs to it via the BroadcastChannel API and localStorage, so it also works correctly on reload.
+## Cloudflare Deployment
+
+The app deploys as:
+
+- **Cloudflare Pages** — serves the React SPA
+- **Cloudflare Worker** (`gmassisstant-api`) — handles all API requests
+- **Cloudflare D1** — SQLite database
+- **Cloudflare R2** — file storage for uploaded images and audio
+
+Pages routes `/api/*` requests to the Worker via a Service Binding (no public round-trip).
+
+### Prerequisites
+
+- A Cloudflare account
+- [Wrangler CLI](https://developers.cloudflare.com/workers/wrangler/install-and-update/) installed and authenticated:
+  ```bash
+  npx wrangler login
+  ```
+
+### First-time setup
+
+#### 1. Create the D1 database
+
+```bash
+npx wrangler d1 create gmassisstant
+```
+
+Copy the `database_id` from the output and paste it into `packages/worker/wrangler.toml`:
+
+```toml
+[[d1_databases]]
+binding = "DB"
+database_name = "gmassisstant"
+database_id = "YOUR_DATABASE_ID_HERE"
+```
+
+#### 2. Create the R2 bucket
+
+```bash
+npx wrangler r2 bucket create gmassisstant-uploads
+```
+
+#### 3. Apply the database schema
+
+```bash
+cd packages/worker
+npx wrangler d1 migrations apply gmassisstant
+```
+
+#### 4. Deploy the Worker
+
+```bash
+cd packages/worker
+npx wrangler deploy
+```
+
+#### 5. Create the Pages project
+
+Go to the [Cloudflare Dashboard](https://dash.cloudflare.com) → **Pages** → **Create a project** → **Connect to Git**.
+
+- Select your repository
+- Set the build command: `pnpm --filter @gmassisstant/frontend build`
+- Set the output directory: `packages/frontend/dist`
+- Save and deploy
+
+#### 6. Add the Service Binding
+
+In the Pages project settings:
+
+**Settings → Functions → Service Bindings → Add binding**
+
+| Variable name | Service |
+|---|---|
+| `API` | `gmassisstant-api` |
+
+This connects the Pages Function proxy to your Worker without a public network hop. Redeploy Pages after adding the binding.
+
+#### 7. (Optional) Protect with Cloudflare Access
+
+To restrict the app to specific users (recommended):
+
+1. Go to **Zero Trust → Access → Applications → Add an application → Self-hosted**
+2. Set the domain to your Pages URL (e.g. `gmassisstant.pages.dev`)
+3. Under **Authentication**, add your identity providers:
+   - **Google**: create an OAuth 2.0 web app at [console.cloud.google.com](https://console.cloud.google.com); set the redirect URI to `https://<your-team>.cloudflareaccess.com/cdn-cgi/access/callback`
+   - **Discord**: create an application at [discord.com/developers](https://discord.com/developers/applications); set the same redirect URI
+4. Create a policy: **Allow** → **Emails** → your email address
+
+### Continuous deployment (GitHub Actions)
+
+The included workflow (`.github/workflows/deploy.yml`) deploys automatically on every push to `main`.
+
+Add these secrets to your GitHub repository (**Settings → Secrets → Actions**):
+
+| Secret | Where to find it |
+|---|---|
+| `CF_API_TOKEN` | Cloudflare Dashboard → My Profile → API Tokens → Create token (use the "Edit Cloudflare Workers" template, also add Pages and D1 permissions) |
+| `CF_ACCOUNT_ID` | Cloudflare Dashboard → right sidebar on the Workers & Pages overview page |
+
+### Local Worker development
+
+You can run the Worker locally against a local D1 and R2 simulation:
+
+```bash
+# Apply schema to the local D1 instance
+cd packages/worker && npx wrangler d1 migrations apply gmassisstant --local
+
+# Start the Worker dev server (rebuilds backend automatically on changes)
+cd packages/worker && npx wrangler dev
+```
+
+The Worker listens on `http://localhost:8787` by default.
+
+---
 
 ## Desktop App
 
 The packaged Electron app runs its own local Hono server and SQLite database — no installation beyond the app itself is required. Your data is stored in your OS user-data folder and persists across updates.
 
+### Build
+
+```bash
+# All platforms (requires matching runners for macOS/Windows)
+pnpm desktop:build
+
+# Platform-specific
+pnpm desktop:build:linux
+pnpm desktop:build:win
+pnpm desktop:build:mac
+```
+
 Download the latest installer from the releases page and run it over the existing installation to update.
+
+---
+
+## Player Screen
+
+Open the player screen from any GM page ("Open Player Screen" button). Move it to your TV or secondary monitor. The DM view syncs to it via the BroadcastChannel API and localStorage, so it also works correctly on reload.
