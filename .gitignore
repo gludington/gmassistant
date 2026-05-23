@@ -1,4 +1,5 @@
 node_modules/
+packages/worker/wrangler.toml
 dist/
 *.db
 *.db-shm

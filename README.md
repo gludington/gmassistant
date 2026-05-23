@@ -102,42 +102,47 @@ Pages routes `/api/*` requests to the Worker via a Service Binding (no public ro
 
 ### First-time setup
 
-#### 1. Create the D1 database
+#### 1. Create a local `wrangler.toml`
+
+`packages/worker/wrangler.toml` is gitignored. Generate it from the committed example:
+
+```bash
+cp packages/worker/wrangler.toml.example packages/worker/wrangler.toml
+```
+
+Then fill in the three placeholders — values come from the next two steps.
+
+#### 2. Create the D1 database
 
 ```bash
 npx wrangler d1 create gmassisstant
 ```
 
-Copy the `database_id` from the output and paste it into `packages/worker/wrangler.toml`:
+Copy the `database_id` and `database_name` from the output into `wrangler.toml` (replacing `${CF_D1_DATABASE_ID}` and `${CF_D1_DATABASE_NAME}`).
 
-```toml
-[[d1_databases]]
-binding = "DB"
-database_name = "gmassisstant"
-database_id = "YOUR_DATABASE_ID_HERE"
-```
-
-#### 2. Create the R2 bucket
+#### 3. Create the R2 bucket
 
 ```bash
 npx wrangler r2 bucket create gmassisstant-uploads
 ```
 
-#### 3. Apply the database schema
+Set `${CF_R2_BUCKET_NAME}` to `gmassisstant-uploads` in `wrangler.toml`.
+
+#### 4. Apply the database schema
 
 ```bash
 cd packages/worker
 npx wrangler d1 migrations apply gmassisstant
 ```
 
-#### 4. Deploy the Worker
+#### 5. Deploy the Worker
 
 ```bash
 cd packages/worker
 npx wrangler deploy
 ```
 
-#### 5. Create the Pages project
+#### 6. Create the Pages project
 
 Go to the [Cloudflare Dashboard](https://dash.cloudflare.com) → **Pages** → **Create a project** → **Connect to Git**.
 
@@ -146,7 +151,7 @@ Go to the [Cloudflare Dashboard](https://dash.cloudflare.com) → **Pages** → 
 - Set the output directory: `packages/frontend/dist`
 - Save and deploy
 
-#### 6. Add the Service Binding
+#### 7. Add the Service Binding
 
 In the Pages project settings:
 
@@ -158,7 +163,7 @@ In the Pages project settings:
 
 This connects the Pages Function proxy to your Worker without a public network hop. Redeploy Pages after adding the binding.
 
-#### 7. (Optional) Protect with Cloudflare Access
+#### 8. (Optional) Protect with Cloudflare Access
 
 To restrict the app to specific users (recommended):
 
@@ -179,12 +184,19 @@ Add these secrets to your GitHub repository (**Settings → Secrets → Actions*
 |---|---|
 | `CF_API_TOKEN` | Cloudflare Dashboard → My Profile → API Tokens → Create token (use the "Edit Cloudflare Workers" template, also add Pages and D1 permissions) |
 | `CF_ACCOUNT_ID` | Cloudflare Dashboard → right sidebar on the Workers & Pages overview page |
+| `CF_D1_DATABASE_NAME` | The name you gave to `wrangler d1 create` (e.g. `gmassisstant`) |
+| `CF_D1_DATABASE_ID` | Shown after `wrangler d1 create`, or via `wrangler d1 list` |
+| `CF_R2_BUCKET_NAME` | The name you gave to `wrangler r2 bucket create` (e.g. `gmassisstant-uploads`) |
 
 ### Local Worker development
 
 You can run the Worker locally against a local D1 and R2 simulation:
 
 ```bash
+# Generate wrangler.toml first (if you haven't already)
+cp packages/worker/wrangler.toml.example packages/worker/wrangler.toml
+# Then fill in the placeholder values
+
 # Apply schema to the local D1 instance
 cd packages/worker && npx wrangler d1 migrations apply gmassisstant --local
 
