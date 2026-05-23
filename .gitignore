@@ -5,7 +5,6 @@ dist/
 *.db-wal
 .env
 .claude/
-packages/backend/drizzle/meta/
 packages/types/src/*.js
 packages/backend/uploads/
 packages/desktop/release/
