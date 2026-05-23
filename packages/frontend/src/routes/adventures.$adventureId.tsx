@@ -6,6 +6,7 @@ import type { SceneFit } from '@gmassisstant/types';
 import { Open5eSearch } from '../components/Open5eSearch';
 import { GmHeader } from '../components/GmHeader';
 import { StatBlockEditor } from '../components/StatBlockEditor';
+import { PlaylistDrawer } from '../components/PlaylistDrawer';
 import { useAudio, type Playlist, type PlaylistTrack } from '../hooks/useAudio';
 
 // ── Types ────────────────────────────────────────────────────────────────────
@@ -210,6 +211,7 @@ function AdventureDetailPage() {
 
   const [editingPlayerId, setEditingPlayerId] = useState<number | null>(null);
   const [editingAdventure, setEditingAdventure] = useState(false);
+  const [showPlaylistDrawer, setShowPlaylistDrawer] = useState(false);
   const [adventureNameDraft, setAdventureNameDraft] = useState('');
   const [adventureDescDraft, setAdventureDescDraft] = useState('');
 
@@ -256,7 +258,16 @@ function AdventureDetailPage() {
   return (
     <div style={s.page}>
       <HoverStyles />
-      <GmHeader>
+      <GmHeader rightSlot={
+        <button
+          type="button"
+          style={showPlaylistDrawer ? s.btnActive : s.btnSecondary}
+          onClick={() => setShowPlaylistDrawer(v => !v)}
+          title="Playlists"
+        >
+          🎵 Playlists
+        </button>
+      }>
         <Link to="/" style={s.back}>← Adventures</Link>
         {editingAdventure ? (
           <form
@@ -354,8 +365,13 @@ function AdventureDetailPage() {
           ))}
         </Section>
 
-        {/* Playlists */}
-        <PlaylistsSection adventureId={Number(adventureId)} playlists={data.playlists} onInvalidate={invalidate} />
+        {showPlaylistDrawer && (
+          <PlaylistDrawer
+            adventureId={Number(adventureId)}
+            onClose={() => setShowPlaylistDrawer(false)}
+            onInvalidate={invalidate}
+          />
+        )}
 
         {/* Image Scenes */}
         <Section
@@ -417,285 +433,6 @@ function AdventureDetailPage() {
         </Section>
       </main>
     </div>
-  );
-}
-
-// ── TrackList ─────────────────────────────────────────────────────────────────
-
-function TrackList({ tracks, onDelete, onReorder }: {
-  tracks: PlaylistTrack[];
-  onDelete: (id: number) => void;
-  onReorder: (ordered: PlaylistTrack[]) => void;
-}) {
-  const [localTracks, setLocalTracks] = useState<PlaylistTrack[]>(tracks);
-  const [draggingId, setDraggingId] = useState<number | null>(null);
-  const lastOverIdRef = useRef<number | null>(null);
-  const droppedRef = useRef(false);
-
-  useEffect(() => {
-    if (draggingId === null) setLocalTracks(tracks);
-  }, [tracks]);
-
-  function handleDragStart(id: number) {
-    droppedRef.current = false;
-    lastOverIdRef.current = null;
-    setDraggingId(id);
-  }
-
-  function handleDragOver(e: React.DragEvent, id: number) {
-    e.preventDefault();
-    if (draggingId === null || draggingId === id || lastOverIdRef.current === id) return;
-    lastOverIdRef.current = id;
-    setLocalTracks(prev => {
-      const from = prev.findIndex(t => t.id === draggingId);
-      const to = prev.findIndex(t => t.id === id);
-      if (from === -1 || to === -1 || from === to) return prev;
-      const next = [...prev];
-      next.splice(to, 0, next.splice(from, 1)[0]);
-      return next;
-    });
-  }
-
-  function handleDrop() {
-    droppedRef.current = true;
-    setDraggingId(null);
-    onReorder(localTracks);
-  }
-
-  function handleDragEnd() {
-    if (!droppedRef.current) setLocalTracks(tracks);
-    droppedRef.current = false;
-    setDraggingId(null);
-  }
-
-  return (
-    <div>
-      {localTracks.map((track) => (
-        <div
-          key={track.id}
-          draggable
-          onDragStart={() => handleDragStart(track.id)}
-          onDragOver={(e) => handleDragOver(e, track.id)}
-          onDrop={handleDrop}
-          onDragEnd={handleDragEnd}
-          style={{
-            display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4,
-            padding: '4px 8px', background: '#1a1a2e', borderRadius: 4,
-            opacity: track.id === draggingId ? 0.35 : 1,
-            cursor: 'default',
-            transition: 'opacity 0.1s',
-          }}
-        >
-          <span
-            style={{ cursor: 'grab', color: '#444', fontSize: '1rem', userSelect: 'none', lineHeight: 1, flexShrink: 0 }}
-            title="Drag to reorder"
-          >
-            ⠿
-          </span>
-          <span style={{ fontSize: '0.75rem', flexShrink: 0 }}>{track.type === 'youtube' ? '▶' : '🎵'}</span>
-          <span style={{ flex: 1, fontSize: '0.875rem', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{track.name}</span>
-          <span style={{ fontSize: '0.7rem', color: '#555', maxWidth: 180, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', flexShrink: 0 }}>{track.url}</span>
-          <button style={s.btnIcon} onClick={() => onDelete(track.id)}>✕</button>
-        </div>
-      ))}
-    </div>
-  );
-}
-
-// ── PlaylistsSection ──────────────────────────────────────────────────────────
-
-function PlaylistsSection({ adventureId, playlists, onInvalidate }: { adventureId: number; playlists: Playlist[]; onInvalidate: () => void }) {
-  const [newName, setNewName] = useState('');
-  const [expandedId, setExpandedId] = useState<number | null>(null);
-  const [addingTrackId, setAddingTrackId] = useState<number | null>(null);
-  const { playPlaylist } = useAudio();
-
-  const createPlaylist = useMutation({
-    mutationFn: async () => {
-      if (!newName.trim()) return;
-      await fetch('/api/playlists', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ adventureId, name: newName.trim(), sortOrder: playlists.length }),
-      });
-    },
-    onSuccess: () => { onInvalidate(); setNewName(''); },
-  });
-
-  const deletePlaylist = useMutation({
-    mutationFn: async (id: number) => { await fetch(`/api/playlists/${id}`, { method: 'DELETE' }); },
-    onSuccess: onInvalidate,
-  });
-
-  const deleteTrack = useMutation({
-    mutationFn: async (id: number) => { await fetch(`/api/playlists/tracks/${id}`, { method: 'DELETE' }); },
-    onSuccess: onInvalidate,
-  });
-
-  const reorderTracks = useMutation({
-    mutationFn: async (ordered: PlaylistTrack[]) => {
-      await Promise.all(
-        ordered.map((track, i) =>
-          fetch(`/api/playlists/tracks/${track.id}`, {
-            method: 'PUT',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ name: track.name, type: track.type, url: track.url, sortOrder: i }),
-          })
-        )
-      );
-    },
-    onSuccess: onInvalidate,
-  });
-
-  return (
-    <section style={s.section}>
-      <div style={s.sectionHeader}>
-        <h2 style={s.sectionTitle}>Playlists ({playlists.length})</h2>
-      </div>
-      <form style={{ display: 'flex', gap: 8, marginBottom: 12 }} onSubmit={(e) => { e.preventDefault(); createPlaylist.mutate(); }}>
-        <input
-          style={{ ...s.input, flex: 1 }}
-          placeholder="New playlist name"
-          value={newName}
-          onChange={(e) => setNewName(e.target.value)}
-        />
-        <button style={s.btnPrimary} type="submit" disabled={!newName.trim() || createPlaylist.isPending}>+ Add Playlist</button>
-      </form>
-      {playlists.length === 0 && <p style={s.muted}>No playlists yet.</p>}
-      {playlists.map((pl) => (
-        <div key={pl.id} style={{ ...s.sceneWrapper, marginBottom: 8 }}>
-          <div style={s.card}>
-            <div style={s.cardBody}>
-              <strong style={s.cardTitle}>{pl.name}</strong>
-              <span style={{ ...s.badge, marginLeft: 8 }}>{pl.tracks.length} tracks</span>
-            </div>
-            <div style={s.cardRight}>
-              {pl.tracks.length > 0 && (
-                <button style={{ ...s.btnIcon, color: '#c9a84c' }} onClick={() => playPlaylist(pl)} title="Play now">▶</button>
-              )}
-              <button style={s.btnSecondarySmall} onClick={() => setExpandedId(expandedId === pl.id ? null : pl.id)}>
-                {expandedId === pl.id ? 'Close' : 'Manage'}
-              </button>
-              <button style={s.btnIcon} onClick={() => deletePlaylist.mutate(pl.id)}>✕</button>
-            </div>
-          </div>
-          {expandedId === pl.id && (
-            <div style={s.sceneDetail}>
-              <TrackList
-                tracks={pl.tracks}
-                onDelete={(id) => deleteTrack.mutate(id)}
-                onReorder={(ordered) => reorderTracks.mutate(ordered)}
-              />
-              {addingTrackId === pl.id ? (
-                <AddTrackForm
-                  playlistId={pl.id}
-                  onSuccess={() => { onInvalidate(); setAddingTrackId(null); }}
-                  onCancel={() => setAddingTrackId(null)}
-                />
-              ) : (
-                <button style={{ ...s.btnSecondarySmall, marginTop: 8 }} onClick={() => setAddingTrackId(pl.id)}>+ Add Track</button>
-              )}
-            </div>
-          )}
-        </div>
-      ))}
-    </section>
-  );
-}
-
-function AddTrackForm({ playlistId, onSuccess, onCancel }: { playlistId: number; onSuccess: () => void; onCancel: () => void }) {
-  const [name, setName] = useState('');
-  const [type, setType] = useState<'file' | 'youtube'>('youtube');
-  const [url, setUrl] = useState('');
-  const [uploading, setUploading] = useState(false);
-  const [uploadError, setUploadError] = useState<string | null>(null);
-  const fileRef = useRef<HTMLInputElement>(null);
-
-  const addTrack = useMutation({
-    mutationFn: async (data: { name: string; type: 'file' | 'youtube'; url: string }) => {
-      const res = await fetch('/api/playlists/tracks', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ playlistId, ...data, sortOrder: 0 }),
-      });
-      if (!res.ok) throw new Error(await res.text());
-    },
-    onSuccess,
-  });
-
-  async function handleFileUpload(files: FileList | null) {
-    if (!files || files.length === 0) return;
-    setUploading(true);
-    setUploadError(null);
-    const errors: string[] = [];
-    try {
-      for (let i = 0; i < files.length; i++) {
-        const form = new FormData();
-        form.append('file', files[i]);
-        const res = await fetch('/api/playlists/upload', { method: 'POST', body: form });
-        if (!res.ok) {
-          const body = await res.json().catch(() => ({ error: 'Upload failed' })) as { error?: string };
-          errors.push(`${files[i].name}: ${body.error ?? 'Upload failed'}`);
-          continue;
-        }
-        const { url: fileUrl, name: fileName } = await res.json() as { url: string; name: string };
-        await fetch('/api/playlists/tracks', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ playlistId, name: fileName, type: 'file', url: fileUrl, sortOrder: 0 }),
-        });
-      }
-      if (errors.length > 0) {
-        setUploadError(errors.join('\n'));
-      } else {
-        onSuccess();
-      }
-    } finally {
-      setUploading(false);
-    }
-  }
-
-  function handleSubmit(e: React.FormEvent) {
-    e.preventDefault();
-    if (!name.trim() || !url.trim()) return;
-    addTrack.mutate({ name: name.trim(), type, url: url.trim() });
-  }
-
-  return (
-    <form style={{ ...s.form, marginTop: 8 }} onSubmit={handleSubmit}>
-      <div style={s.formRow}>
-        <select style={s.input} value={type} onChange={(e) => setType(e.target.value as 'file' | 'youtube')}>
-          <option value="youtube">YouTube</option>
-          <option value="file">Upload File</option>
-        </select>
-      </div>
-      {type === 'youtube' ? (
-        <>
-          <input style={s.input} placeholder="Track name" value={name} onChange={(e) => setName(e.target.value)} />
-          <input style={s.input} placeholder="YouTube URL (https://youtube.com/watch?v=...)" value={url} onChange={(e) => setUrl(e.target.value)} />
-          <div style={{ display: 'flex', gap: 8 }}>
-            <button style={s.btnPrimary} type="submit" disabled={addTrack.isPending || !name.trim() || !url.trim()}>Add</button>
-            <button style={s.btnSecondary} type="button" onClick={onCancel}>Cancel</button>
-          </div>
-        </>
-      ) : (
-        <>
-          <input ref={fileRef} type="file" accept="audio/*" multiple style={{ display: 'none' }} onChange={(e) => handleFileUpload(e.target.files)} />
-          <div style={{ display: 'flex', gap: 8 }}>
-            <button style={s.btnPrimary} type="button" disabled={uploading} onClick={() => fileRef.current?.click()}>
-              {uploading ? 'Uploading...' : 'Choose Audio Files'}
-            </button>
-            <button style={s.btnSecondary} type="button" onClick={onCancel}>Cancel</button>
-          </div>
-          {uploadError && (
-            <div style={{ marginTop: 4, color: '#e05252', fontSize: '0.75rem', whiteSpace: 'pre-line' }}>{uploadError}</div>
-          )}
-        </>
-      )}
-      {addTrack.isError && (
-        <div style={{ marginTop: 4, color: '#e05252', fontSize: '0.75rem' }}>{String(addTrack.error)}</div>
-      )}
-    </form>
   );
 }
 

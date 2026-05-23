@@ -1,14 +1,17 @@
 import { Link } from '@tanstack/react-router';
 import type { ReactNode } from 'react';
 
-export function GmHeader({ children, wrap }: { children: ReactNode; wrap?: boolean }) {
+export function GmHeader({ children, wrap, rightSlot }: { children: ReactNode; wrap?: boolean; rightSlot?: ReactNode }) {
   return (
     <header style={{ ...header, flexWrap: wrap ? 'wrap' : 'nowrap' }}>
       <Link to="/" style={brand} title="GM Assistant — Home">
         <img src="/logo.png" alt="GM Assistant" style={logo} />
       </Link>
       {children}
-      <Link to="/help" style={helpLink} title="Help">?</Link>
+      <div style={rightGroup}>
+        {rightSlot}
+        <Link to="/help" style={helpLink} title="Help">?</Link>
+      </div>
     </header>
   );
 }
@@ -35,8 +38,15 @@ const logo: React.CSSProperties = {
   objectFit: 'contain',
 };
 
-const helpLink: React.CSSProperties = {
+const rightGroup: React.CSSProperties = {
   marginLeft: 'auto',
+  display: 'flex',
+  alignItems: 'center',
+  gap: 8,
+  flexShrink: 0,
+};
+
+const helpLink: React.CSSProperties = {
   flexShrink: 0,
   width: 28,
   height: 28,
