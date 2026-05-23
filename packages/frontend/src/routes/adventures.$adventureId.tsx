@@ -4,6 +4,7 @@ import { useState, useRef, useEffect } from 'react';
 import { useBroadcastSender } from '../hooks/useBroadcast';
 import type { SceneFit } from '@gmassisstant/types';
 import { Open5eSearch } from '../components/Open5eSearch';
+import { GmHeader } from '../components/GmHeader';
 import { useAudio, type Playlist, type PlaylistTrack } from '../hooks/useAudio';
 
 // ── Types ────────────────────────────────────────────────────────────────────
@@ -254,7 +255,7 @@ function AdventureDetailPage() {
   return (
     <div style={s.page}>
       <HoverStyles />
-      <header style={s.header}>
+      <GmHeader>
         <Link to="/" style={s.back}>← Adventures</Link>
         {editingAdventure ? (
           <form
@@ -307,7 +308,7 @@ function AdventureDetailPage() {
         <button style={s.btnSecondary} onClick={() => window.open('/player', 'gmassisstant-player', 'width=1920,height=1080')}>
           Open Player Screen
         </button>
-      </header>
+      </GmHeader>
 
       <main style={s.main}>
         {data.description && <p style={s.desc}>{data.description}</p>}
@@ -760,16 +761,65 @@ function SceneCard({
     onSuccess: onInvalidate,
   });
 
-  const moveImage = useMutation({
-    mutationFn: async ({ id, sortOrder }: { id: number; sortOrder: number }) => {
-      await fetch(`/api/adventures/scenes/images/${id}`, {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ sortOrder }),
-      });
+  const reorderImages = useMutation({
+    mutationFn: async (ordered: SceneImage[]) => {
+      await Promise.all(
+        ordered.map((img, i) =>
+          fetch(`/api/adventures/scenes/images/${img.id}`, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ sortOrder: i }),
+          })
+        )
+      );
     },
     onSuccess: onInvalidate,
   });
+
+  const [localImages, setLocalImages] = useState<SceneImage[]>(() =>
+    [...scene.images].sort((a, b) => a.sortOrder - b.sortOrder)
+  );
+  const [draggingId, setDraggingId] = useState<number | null>(null);
+  const lastOverIdRef = useRef<number | null>(null);
+  const droppedRef = useRef(false);
+
+  useEffect(() => {
+    if (draggingId === null)
+      setLocalImages([...scene.images].sort((a, b) => a.sortOrder - b.sortOrder));
+  }, [scene.images]);
+
+  function handleImgDragStart(id: number) {
+    droppedRef.current = false;
+    lastOverIdRef.current = null;
+    setDraggingId(id);
+  }
+
+  function handleImgDragOver(e: React.DragEvent, id: number) {
+    e.preventDefault();
+    if (draggingId === null || draggingId === id || lastOverIdRef.current === id) return;
+    lastOverIdRef.current = id;
+    setLocalImages(prev => {
+      const from = prev.findIndex(t => t.id === draggingId);
+      const to = prev.findIndex(t => t.id === id);
+      if (from === -1 || to === -1 || from === to) return prev;
+      const next = [...prev];
+      next.splice(to, 0, next.splice(from, 1)[0]);
+      return next;
+    });
+  }
+
+  function handleImgDrop() {
+    droppedRef.current = true;
+    setDraggingId(null);
+    reorderImages.mutate(localImages);
+  }
+
+  function handleImgDragEnd() {
+    if (!droppedRef.current)
+      setLocalImages([...scene.images].sort((a, b) => a.sortOrder - b.sortOrder));
+    droppedRef.current = false;
+    setDraggingId(null);
+  }
 
   async function handleFiles(files: FileList | null) {
     if (!files || files.length === 0) return;
@@ -789,17 +839,6 @@ function SceneCard({
       if (fileInputRef.current) fileInputRef.current.value = '';
     }
   }
-
-  function handleMove(index: number, direction: -1 | 1) {
-    const sorted = [...scene.images].sort((a, b) => a.sortOrder - b.sortOrder);
-    const target = sorted[index + direction];
-    const current = sorted[index];
-    if (!target) return;
-    moveImage.mutate({ id: current.id, sortOrder: target.sortOrder });
-    moveImage.mutate({ id: target.id, sortOrder: current.sortOrder });
-  }
-
-  const sorted = [...scene.images].sort((a, b) => a.sortOrder - b.sortOrder);
 
   return (
     <div style={s.sceneWrapper}>
@@ -839,15 +878,24 @@ function SceneCard({
             />
           </div>
 
-          {sorted.length === 0 && (
+          {localImages.length === 0 && (
             <p style={s.muted}>No images yet. Add some to get started.</p>
           )}
 
           <div style={s.imageGrid}>
-            {sorted.map((img, index) => (
-              <div key={img.id} style={s.imageTileWrapper}>
+            {localImages.map((img) => (
+              <div
+                key={img.id}
+                style={{ ...s.imageTileWrapper, opacity: img.id === draggingId ? 0.35 : 1, transition: 'opacity 0.1s' }}
+                draggable
+                onDragStart={() => handleImgDragStart(img.id)}
+                onDragOver={(e) => handleImgDragOver(e, img.id)}
+                onDrop={handleImgDrop}
+                onDragEnd={handleImgDragEnd}
+              >
                 <div style={s.imageTile} className="image-tile">
-                  <img src={img.filePath} alt="" style={s.thumbnail} />
+                  <img src={img.filePath} alt="" draggable={false} style={s.thumbnail} />
+                  <span style={s.dragHandle} title="Drag to reorder">⠿</span>
                   <div style={s.tileOverlay} className="tile-overlay">
                     <button
                       style={s.tileBtn}
@@ -861,20 +909,6 @@ function SceneCard({
                       ▶ Show
                     </button>
                     <div style={s.tileActions}>
-                      <button
-                        style={s.tileIconBtn}
-                        className="tile-icon-btn"
-                        disabled={index === 0}
-                        onClick={() => handleMove(index, -1)}
-                        title="Move left"
-                      >←</button>
-                      <button
-                        style={s.tileIconBtn}
-                        className="tile-icon-btn"
-                        disabled={index === sorted.length - 1}
-                        onClick={() => handleMove(index, 1)}
-                        title="Move right"
-                      >→</button>
                       <button
                         style={{ ...s.tileIconBtn, color: '#e05c5c' }}
                         onClick={() => removeImage.mutate(img.id)}
@@ -1420,10 +1454,6 @@ function EncounterForm({
 
 const s: Record<string, React.CSSProperties> = {
   page: { minHeight: '100vh', background: '#1a1a2e', color: '#e0e0e0', paddingBottom: 60 },
-  header: {
-    padding: '16px 32px', borderBottom: '1px solid #2a2a4a',
-    background: '#16213e', display: 'flex', alignItems: 'center', gap: 16,
-  },
   back: { color: '#c9a84c', textDecoration: 'none', fontSize: '0.875rem' },
   title: { margin: 0, fontSize: '1.5rem', color: '#c9a84c' },
   main: { padding: '32px', maxWidth: 900, margin: '0 auto' },
@@ -1468,6 +1498,12 @@ const s: Record<string, React.CSSProperties> = {
     aspectRatio: '16/9', background: '#1a1a2e', cursor: 'pointer',
   },
   thumbnail: { width: '100%', height: '100%', objectFit: 'cover', display: 'block' },
+  dragHandle: {
+    position: 'absolute' as const, top: 4, left: 4,
+    color: 'rgba(255,255,255,0.5)', fontSize: '1rem', lineHeight: 1,
+    cursor: 'grab', userSelect: 'none' as const, zIndex: 10,
+    textShadow: '0 1px 3px rgba(0,0,0,0.8)',
+  },
   tileOverlay: {
     position: 'absolute', inset: 0,
     background: 'rgba(0,0,0,0.6)',

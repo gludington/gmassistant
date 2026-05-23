@@ -217,6 +217,7 @@ export function AudioProvider({ children }: { children: ReactNode }) {
 
   const playPlaylist = useCallback((playlist: Playlist, trackIndex = 0) => {
     if (playlist.tracks.length === 0) return;
+    if (stateRef.current.currentPlaylist?.id === playlist.id) return;
     const { order, pos } = buildPlayOrder(playlist.tracks.length, stateRef.current.playMode, trackIndex);
     playOrderRef.current = order;
     playPosRef.current = pos;

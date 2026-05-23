@@ -1,4 +1,5 @@
 import { createFileRoute, Link } from '@tanstack/react-router';
+import { GmHeader } from '../components/GmHeader';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useState } from 'react';
 import type { Adventure } from '@gmassisstant/types';
@@ -60,15 +61,12 @@ function DmHome() {
 
   return (
     <div style={styles.page}>
-      <header style={styles.header}>
+      <GmHeader>
         <h1 style={styles.title}>GM Assistant</h1>
-        <button style={styles.btnDanger} onClick={blankPlayerScreen}>
-          Blank Screen
-        </button>
-        <button style={styles.btnSecondary} onClick={openPlayerWindow}>
-          Open Player Screen
-        </button>
-      </header>
+        <div style={{ flex: 1 }} />
+        <button style={styles.btnDanger} onClick={blankPlayerScreen}>Blank Screen</button>
+        <button style={styles.btnSecondary} onClick={openPlayerWindow}>Open Player Screen</button>
+      </GmHeader>
 
       <main style={styles.main}>
         <div style={styles.sectionHeader}>
@@ -119,11 +117,6 @@ function DmHome() {
 
 const styles: Record<string, React.CSSProperties> = {
   page: { minHeight: '100vh', background: '#1a1a2e', color: '#e0e0e0' },
-  header: {
-    display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-    padding: '16px 32px', borderBottom: '1px solid #2a2a4a',
-    background: '#16213e',
-  },
   title: { margin: 0, fontSize: '1.5rem', color: '#c9a84c' },
   main: { padding: '32px', maxWidth: 800, margin: '0 auto' },
   sectionHeader: { display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 16 },

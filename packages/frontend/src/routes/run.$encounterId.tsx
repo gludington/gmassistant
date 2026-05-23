@@ -5,6 +5,7 @@ import type { LiveCombatant } from '@gmassisstant/types';
 import { useBroadcastSender, useBroadcastReceiver } from '../hooks/useBroadcast';
 import { CONDITIONS, conditionIcon } from '../conditions';
 import { Open5eSearch } from '../components/Open5eSearch';
+import { GmHeader } from '../components/GmHeader';
 import { useAudio } from '../hooks/useAudio';
 
 // ── Types ────────────────────────────────────────────────────────────────────
@@ -497,7 +498,7 @@ function EncounterRunner() {
 
   return (
     <div style={s.page}>
-      <header style={s.header}>
+      <GmHeader wrap>
         <Link
           to="/adventures/$adventureId"
           params={{ adventureId: String(encounter.adventureId) }}
@@ -552,7 +553,7 @@ function EncounterRunner() {
             Open Player Screen
           </button>
         </div>
-      </header>
+      </GmHeader>
 
       <main style={s.main}>
         {showAddForm && (
@@ -1448,11 +1449,6 @@ function typeStyle(type: RunCombatant['type']): React.CSSProperties {
 
 const s: Record<string, React.CSSProperties> = {
   page: { minHeight: '100vh', background: '#1a1a2e', color: '#e0e0e0', paddingBottom: 60 },
-  header: {
-    padding: '16px 32px', borderBottom: '1px solid #2a2a4a',
-    background: '#16213e', display: 'flex', alignItems: 'center', gap: 16,
-    flexWrap: 'wrap',
-  },
   back: { color: '#c9a84c', textDecoration: 'none', fontSize: '0.875rem', whiteSpace: 'nowrap' },
   title: { margin: 0, fontSize: '1.4rem', color: '#c9a84c', flex: 1 },
   headerActions: { display: 'flex', gap: 8, flexWrap: 'wrap' },
