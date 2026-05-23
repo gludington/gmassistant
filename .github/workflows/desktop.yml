@@ -14,13 +14,13 @@ jobs:
         include:
           - os: ubuntu-latest
             platform: linux
-            script: package:linux
+            args: --linux
           - os: windows-latest
             platform: win
-            script: package:win
+            args: --win
           - os: macos-latest
             platform: mac
-            script: package:mac
+            args: --mac
 
     runs-on: ${{ matrix.os }}
 
@@ -39,11 +39,17 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
-      - name: Build (compile all packages)
-        run: pnpm desktop:compile
+      - name: Build backend
+        run: cd packages/backend && npx tsc
 
-      - name: Package (${{ matrix.platform }})
-        run: pnpm --filter @gmassisstant/desktop ${{ matrix.script }}
+      - name: Build frontend (desktop mode)
+        run: cd packages/frontend && npx vite build --mode desktop
+
+      - name: Build desktop
+        run: cd packages/desktop && npx tsc
+
+      - name: Package
+        run: cd packages/desktop && npx electron-builder ${{ matrix.args }}
         env:
           CSC_IDENTITY_AUTO_DISCOVERY: false
 
