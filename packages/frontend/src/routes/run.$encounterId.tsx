@@ -6,6 +6,7 @@ import { useBroadcastSender, useBroadcastReceiver } from '../hooks/useBroadcast'
 import { CONDITIONS, conditionIcon } from '../conditions';
 import { Open5eSearch } from '../components/Open5eSearch';
 import { GmHeader } from '../components/GmHeader';
+import { StatBlockEditor } from '../components/StatBlockEditor';
 import { useAudio } from '../hooks/useAudio';
 
 // ── Types ────────────────────────────────────────────────────────────────────
@@ -421,7 +422,7 @@ function EncounterRunner() {
     if (showOnPlayer) broadcast(next, true);
   }
 
-  async function updateCombatantBase(id: number, values: { name: string; maxHp: number; initiativeModifier: number; type: RunCombatant['type']; color: string; description?: string | null }) {
+  async function updateCombatantBase(id: number, values: { name: string; maxHp: number; initiativeModifier: number; type: RunCombatant['type']; color: string; description?: string | null; statBlock?: string }) {
     const c = combatants.find((x) => x.id === id);
     await fetch(`/api/encounters/combatants/${id}`, {
       method: 'PUT',
@@ -586,6 +587,10 @@ function EncounterRunner() {
         <StatBlockPanel
           combatant={statBlockCombatant}
           onClose={() => setStatBlockCombatant(null)}
+          onEditStatBlock={(json) => {
+            update(statBlockCombatant.id, { statBlock: json });
+            setStatBlockCombatant((prev) => prev ? { ...prev, statBlock: json } : null);
+          }}
         />
       )}
     </div>
@@ -610,7 +615,7 @@ function CombatantRow({
   onRollInit: () => void;
   onAdjustHp: (delta: number) => void;
   onUpdate: (patch: Partial<RunCombatant>) => void;
-  onUpdateBase: (values: { name: string; maxHp: number; initiativeModifier: number; type: RunCombatant['type']; color: string }) => void;
+  onUpdateBase: (values: { name: string; maxHp: number; initiativeModifier: number; type: RunCombatant['type']; color: string; statBlock?: string }) => void;
   onToggleVisible: () => void;
   onSetActive: () => void;
   onShowStatBlock?: () => void;
@@ -759,7 +764,7 @@ function CombatantRow({
             title={c.visibleToPlayers ? 'Visible to players (click to hide)' : 'Hidden from players (click to show)'}
           >👁</button>
         )}
-        {!c.isAdventurePlayer && !isGroup && (
+        {!c.isAdventurePlayer && (
           <button style={s.editBtn} onClick={() => setEditingBase((v) => !v)} title="Edit">✎</button>
         )}
         {onShowStatBlock && (
@@ -945,9 +950,9 @@ function CombatantRow({
         )}
       </div>
     </div>
-    {editingBase && !isGroup && (
+    {editingBase && (
       <AddCombatantForm
-        initialValues={{ name: c.name, maxHp: c.maxHp, initiativeModifier: c.initiativeModifier, type: c.type, color: c.color ?? '#888888', initiative: c.initiative }}
+        initialValues={{ name: c.name, maxHp: c.maxHp, initiativeModifier: c.initiativeModifier, type: c.type, color: c.color ?? '#888888', initiative: c.initiative, statBlock: c.statBlock }}
         onSubmit={(values) => { onUpdateBase(values); setEditingBase(false); }}
         onCancel={() => setEditingBase(false)}
       />
@@ -1018,7 +1023,7 @@ function AddCombatantForm({
 }: {
   onSubmit: (v: { name: string; maxHp: number; initiativeModifier: number; type: RunCombatant['type']; color: string; description: string | null; visibleToPlayers: boolean; initiative: number | null; statBlock?: string; members?: { label: string; maxHp: number }[] }) => void;
   onCancel: () => void;
-  initialValues?: { name: string; maxHp: number; initiativeModifier: number; type: RunCombatant['type']; color: string; initiative: number | null };
+  initialValues?: { name: string; maxHp: number; initiativeModifier: number; type: RunCombatant['type']; color: string; initiative: number | null; statBlock?: string | null };
 }) {
   const [name, setName] = useState(initialValues?.name ?? '');
   const [maxHp, setMaxHp] = useState(initialValues?.maxHp ?? 10);
@@ -1029,7 +1034,8 @@ function AddCombatantForm({
   const [description, setDescription] = useState('');
   const [visibleToPlayers, setVisibleToPlayers] = useState(true);
   const [members, setMembers] = useState<{ label: string; maxHp: number }[]>([]);
-  const [pendingStatBlock, setPendingStatBlock] = useState<string | undefined>();
+  const [pendingStatBlock, setPendingStatBlock] = useState<string | undefined>(initialValues?.statBlock ?? undefined);
+  const [showSbEditor, setShowSbEditor] = useState(false);
 
   function addMember() {
     setMembers((prev) => [...prev, { label: '', maxHp: 10 }]);
@@ -1098,8 +1104,25 @@ function AddCombatantForm({
         <button style={s.btnSecondary} type="submit" disabled={!name.trim() || isGroupInvalid}>
           {initialValues ? 'Save' : 'Add'}
         </button>
+        {type !== 'event' && type !== 'lair' && (
+          <button
+            type="button"
+            style={{ ...s.btnGhost, color: pendingStatBlock ? '#c9a84c' : '#666' }}
+            onClick={() => setShowSbEditor(true)}
+            title={pendingStatBlock ? 'Edit stat block' : 'Create stat block'}
+          >
+            📖 {pendingStatBlock ? 'Edit Stat Block' : 'Stat Block'}
+          </button>
+        )}
         <button style={s.btnGhost} type="button" onClick={onCancel}>Cancel</button>
       </div>
+      {showSbEditor && (
+        <StatBlockEditor
+          initialData={pendingStatBlock}
+          onSave={(json) => { setPendingStatBlock(json); setShowSbEditor(false); }}
+          onCancel={() => setShowSbEditor(false)}
+        />
+      )}
       {(type === 'event' || type === 'lair') ? (
         <textarea
           style={{ ...s.addInput, width: '100%', marginTop: 8, minHeight: 60, resize: 'vertical', boxSizing: 'border-box' }}
@@ -1277,7 +1300,19 @@ function fmod(n: number | undefined) {
   return n >= 0 ? `+${n}` : `${n}`;
 }
 
-function StatBlockPanel({ combatant, onClose }: { combatant: RunCombatant; onClose: () => void }) {
+function StatBlockPanel({ combatant, onClose, onEditStatBlock }: { combatant: RunCombatant; onClose: () => void; onEditStatBlock?: (json: string) => void }) {
+  const [editing, setEditing] = useState(false);
+
+  if (editing) {
+    return (
+      <StatBlockEditor
+        initialData={combatant.statBlock}
+        onSave={(json) => { onEditStatBlock?.(json); setEditing(false); }}
+        onCancel={() => setEditing(false)}
+      />
+    );
+  }
+
   let sb: StatBlockData = {};
   try { sb = JSON.parse(combatant.statBlock ?? '{}'); } catch {}
 
@@ -1347,7 +1382,12 @@ function StatBlockPanel({ combatant, onClose }: { combatant: RunCombatant; onClo
             <div style={sbName}>{sb.name ?? combatant.name}</div>
             <div style={sbSubtitle}>{[sizeName, typeName, sb.alignment].filter(Boolean).join(', ')}</div>
           </div>
-          <button style={sbCloseBtn} onClick={onClose}>✕</button>
+          <div style={{ display: 'flex', gap: 6 }}>
+            {onEditStatBlock && (
+              <button style={sbCloseBtn} onClick={() => setEditing(true)} title="Edit stat block">✎ Edit</button>
+            )}
+            <button style={sbCloseBtn} onClick={onClose}>✕</button>
+          </div>
         </div>
 
         <div style={sbDivider} />
