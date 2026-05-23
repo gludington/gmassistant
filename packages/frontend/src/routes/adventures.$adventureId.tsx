@@ -5,6 +5,7 @@ import { useBroadcastSender } from '../hooks/useBroadcast';
 import type { SceneFit } from '@gmassisstant/types';
 import { Open5eSearch } from '../components/Open5eSearch';
 import { GmHeader } from '../components/GmHeader';
+import { StatBlockEditor } from '../components/StatBlockEditor';
 import { useAudio, type Playlist, type PlaylistTrack } from '../hooks/useAudio';
 
 // ── Types ────────────────────────────────────────────────────────────────────
@@ -1044,11 +1045,11 @@ function CombatantManager({ encounter, onInvalidate }: { encounter: Encounter; o
   });
 
   const updateCombatant = useMutation({
-    mutationFn: async (body: { id: number; name: string; maxHp: number; initiativeModifier: number; type: Combatant['type']; color: string; description: string | null; visibleToPlayers: boolean; members?: { label: string; maxHp: number }[] }) => {
+    mutationFn: async (body: { id: number; name: string; maxHp: number; initiativeModifier: number; type: Combatant['type']; color: string; description: string | null; visibleToPlayers: boolean; statBlock?: string; members?: { label: string; maxHp: number }[] }) => {
       const res = await fetch(`/api/encounters/combatants/${body.id}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ name: body.name, maxHp: body.maxHp, initiativeModifier: body.initiativeModifier, type: body.type, color: body.color, description: body.description, visibleToPlayers: body.visibleToPlayers, ...(body.members ? { members: body.members } : {}) }),
+        body: JSON.stringify({ name: body.name, maxHp: body.maxHp, initiativeModifier: body.initiativeModifier, type: body.type, color: body.color, description: body.description, visibleToPlayers: body.visibleToPlayers, statBlock: body.statBlock, ...(body.members ? { members: body.members } : {}) }),
       });
       if (!res.ok) throw new Error('Failed to update combatant');
       return res.json() as Promise<Combatant & { members?: { id: number; label: string; maxHp: number }[] }>;
@@ -1160,7 +1161,7 @@ function CombatantForm({
   onSubmit: (v: { name: string; maxHp: number; initiativeModifier: number; type: Combatant['type']; color: string; description: string | null; visibleToPlayers: boolean; statBlock?: string; members?: { label: string; maxHp: number }[] }) => void;
   pending: boolean;
   onCancel: () => void;
-  initialValues?: { name: string; maxHp: number; initiativeModifier: number; type: Combatant['type']; color: string | null; description?: string | null; visibleToPlayers?: boolean; members?: { id: number; label: string; maxHp: number }[] };
+  initialValues?: { name: string; maxHp: number; initiativeModifier: number; type: Combatant['type']; color: string | null; description?: string | null; visibleToPlayers?: boolean; statBlock?: string | null; members?: { id: number; label: string; maxHp: number }[] };
 }) {
   const [name, setName] = useState(initialValues?.name ?? '');
   const [maxHp, setMaxHp] = useState(initialValues?.maxHp ?? 10);
@@ -1174,7 +1175,8 @@ function CombatantForm({
   const [members, setMembers] = useState<{ label: string; maxHp: number }[]>(
     initialValues?.members?.map((m) => ({ label: m.label, maxHp: m.maxHp })) ?? []
   );
-  const [pendingStatBlock, setPendingStatBlock] = useState<string | undefined>();
+  const [pendingStatBlock, setPendingStatBlock] = useState<string | undefined>(initialValues?.statBlock ?? undefined);
+  const [showSbEditor, setShowSbEditor] = useState(false);
 
   function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -1244,8 +1246,25 @@ function CombatantForm({
         <button style={s.btnPrimary} type="submit" disabled={pending || !name.trim() || isGroupInvalid}>
           {pending ? (initialValues ? 'Saving...' : 'Adding...') : (initialValues ? 'Save' : 'Add Combatant')}
         </button>
+        {type !== 'event' && type !== 'lair' && (
+          <button
+            type="button"
+            style={{ ...s.btnSecondary, color: pendingStatBlock ? '#c9a84c' : '#666', borderColor: pendingStatBlock ? '#c9a84c' : '#444' }}
+            onClick={() => setShowSbEditor(true)}
+            title={pendingStatBlock ? 'Edit stat block' : 'Create stat block'}
+          >
+            📖 {pendingStatBlock ? 'Edit Stat Block' : 'Stat Block'}
+          </button>
+        )}
         <button style={s.btnSecondary} type="button" onClick={onCancel}>Cancel</button>
       </div>
+      {showSbEditor && (
+        <StatBlockEditor
+          initialData={pendingStatBlock}
+          onSave={(json) => { setPendingStatBlock(json); setShowSbEditor(false); }}
+          onCancel={() => setShowSbEditor(false)}
+        />
+      )}
       {(type === 'event' || type === 'lair') ? (
         <textarea
           style={{ ...s.input, minHeight: 72, resize: 'vertical', marginTop: 4 }}
