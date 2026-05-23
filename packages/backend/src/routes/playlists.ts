@@ -94,8 +94,8 @@ router.post('/upload', async (c) => {
   }
 
   const ext = (file.name.split('.').pop() ?? 'bin').toLowerCase();
-  if (!['mp3', 'ogg', 'wav', 'flac', 'm4a', 'aac', 'webm'].includes(ext)) {
-    return c.json({ error: 'Unsupported audio file type' }, 400);
+  if (!['mp3', 'ogg', 'oga', 'wav', 'flac', 'm4a', 'aac', 'webm', 'mp4', 'opus', 'wma', 'aiff', 'aif'].includes(ext)) {
+    return c.json({ error: `Unsupported audio file type: .${ext}` }, 400);
   }
 
   await mkdir(UPLOADS_DIR, { recursive: true });

@@ -35,13 +35,13 @@ interface SceneImage {
   filePath: string;
   sortOrder: number;
   fit: SceneFit;
+  playlistId: number | null;
 }
 
 interface ImageScene {
   id: number;
   name: string;
   sortOrder: number;
-  playlistId: number | null;
   images: SceneImage[];
 }
 
@@ -512,15 +512,17 @@ function AddTrackForm({ playlistId, onSuccess, onCancel }: { playlistId: number;
   const [type, setType] = useState<'file' | 'youtube'>('youtube');
   const [url, setUrl] = useState('');
   const [uploading, setUploading] = useState(false);
+  const [uploadError, setUploadError] = useState<string | null>(null);
   const fileRef = useRef<HTMLInputElement>(null);
 
   const addTrack = useMutation({
     mutationFn: async (data: { name: string; type: 'file' | 'youtube'; url: string }) => {
-      await fetch('/api/playlists/tracks', {
+      const res = await fetch('/api/playlists/tracks', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ playlistId, ...data, sortOrder: 0 }),
       });
+      if (!res.ok) throw new Error(await res.text());
     },
     onSuccess,
   });
@@ -528,12 +530,18 @@ function AddTrackForm({ playlistId, onSuccess, onCancel }: { playlistId: number;
   async function handleFileUpload(files: FileList | null) {
     if (!files || files.length === 0) return;
     setUploading(true);
+    setUploadError(null);
+    const errors: string[] = [];
     try {
       for (let i = 0; i < files.length; i++) {
         const form = new FormData();
         form.append('file', files[i]);
         const res = await fetch('/api/playlists/upload', { method: 'POST', body: form });
-        if (!res.ok) continue;
+        if (!res.ok) {
+          const body = await res.json().catch(() => ({ error: 'Upload failed' })) as { error?: string };
+          errors.push(`${files[i].name}: ${body.error ?? 'Upload failed'}`);
+          continue;
+        }
         const { url: fileUrl, name: fileName } = await res.json() as { url: string; name: string };
         await fetch('/api/playlists/tracks', {
           method: 'POST',
@@ -541,7 +549,11 @@ function AddTrackForm({ playlistId, onSuccess, onCancel }: { playlistId: number;
           body: JSON.stringify({ playlistId, name: fileName, type: 'file', url: fileUrl, sortOrder: 0 }),
         });
       }
-      onSuccess();
+      if (errors.length > 0) {
+        setUploadError(errors.join('\n'));
+      } else {
+        onSuccess();
+      }
     } finally {
       setUploading(false);
     }
@@ -579,7 +591,13 @@ function AddTrackForm({ playlistId, onSuccess, onCancel }: { playlistId: number;
             </button>
             <button style={s.btnSecondary} type="button" onClick={onCancel}>Cancel</button>
           </div>
+          {uploadError && (
+            <div style={{ marginTop: 4, color: '#e05252', fontSize: '0.75rem', whiteSpace: 'pre-line' }}>{uploadError}</div>
+          )}
         </>
+      )}
+      {addTrack.isError && (
+        <div style={{ marginTop: 4, color: '#e05252', fontSize: '0.75rem' }}>{String(addTrack.error)}</div>
       )}
     </form>
   );
@@ -607,9 +625,9 @@ function SceneCard({
   const fileInputRef = useRef<HTMLInputElement>(null);
   const { playPlaylist } = useAudio();
 
-  const setScenePlaylist = useMutation({
-    mutationFn: async (playlistId: number | null) => {
-      await fetch(`/api/adventures/scenes/${scene.id}`, {
+  const setImagePlaylist = useMutation({
+    mutationFn: async ({ id, playlistId }: { id: number; playlistId: number | null }) => {
+      await fetch(`/api/adventures/scenes/images/${id}`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ playlistId }),
@@ -617,7 +635,6 @@ function SceneCard({
     },
     onSuccess: onInvalidate,
   });
-
 
   const updateImageFit = useMutation({
     mutationFn: async ({ id, fit }: { id: number; fit: SceneFit }) => {
@@ -690,27 +707,11 @@ function SceneCard({
 
   const sorted = [...scene.images].sort((a, b) => a.sortOrder - b.sortOrder);
 
-  const activePlaylist = playlists.find((p) => p.id === scene.playlistId) ?? null;
-
   return (
     <div style={s.sceneWrapper}>
       <div style={s.card}>
         <div style={s.cardBody}>
           <strong style={s.cardTitle}>{scene.name}</strong>
-          <div style={{ marginTop: 4, display: 'flex', alignItems: 'center', gap: 6 }}>
-            <span style={{ fontSize: '0.72rem', color: '#666' }}>🎵</span>
-            <select
-              style={{ ...s.input, fontSize: '0.75rem', padding: '2px 6px', color: '#888' }}
-              value={scene.playlistId ?? ''}
-              onChange={(e) => setScenePlaylist.mutate(e.target.value ? Number(e.target.value) : null)}
-            >
-              <option value="">No playlist</option>
-              {playlists.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
-            </select>
-            {activePlaylist && activePlaylist.tracks.length > 0 && (
-              <button style={{ ...s.btnIcon, color: '#c9a84c' }} title="Play playlist now" onClick={() => playPlaylist(activePlaylist)}>▶</button>
-            )}
-          </div>
         </div>
         <div style={s.cardRight}>
           <span style={s.badge}>{scene.images.length} images</span>
@@ -759,7 +760,8 @@ function SceneCard({
                       title="Push to player screen"
                       onClick={() => {
                         onSend(img.filePath, img.fit);
-                        if (activePlaylist && activePlaylist.tracks.length > 0) playPlaylist(activePlaylist);
+                        const imgPlaylist = playlists.find((p) => p.id === img.playlistId) ?? null;
+                        if (imgPlaylist && imgPlaylist.tracks.length > 0) playPlaylist(imgPlaylist);
                       }}
                     >
                       ▶ Show
@@ -798,6 +800,18 @@ function SceneCard({
                       {f}
                     </button>
                   ))}
+                </div>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 4, marginTop: 4 }}>
+                  <span style={{ fontSize: '0.7rem', color: '#666' }}>🎵</span>
+                  <select
+                    style={{ ...s.input, fontSize: '0.7rem', padding: '2px 4px', color: '#888', flex: 1 }}
+                    value={img.playlistId ?? ''}
+                    onChange={(e) => setImagePlaylist.mutate({ id: img.id, playlistId: e.target.value ? Number(e.target.value) : null })}
+                  >
+                    <option value="">No playlist</option>
+                    {playlists.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
+                  </select>
+                  {img.playlistId && (() => { const pl = playlists.find((p) => p.id === img.playlistId); return pl && pl.tracks.length > 0 ? <button style={{ ...s.btnIcon, color: '#c9a84c' }} title="Play now" onClick={() => playPlaylist(pl)}>▶</button> : null; })()}
                 </div>
               </div>
             ))}
