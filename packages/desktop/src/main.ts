@@ -32,10 +32,12 @@ function getFreePort(): Promise<number> {
 }
 
 async function startBackend(): Promise<number> {
-  const [{ app: honoApp }, { db }] = await Promise.all([
+  const [{ app: honoApp }, { createLibsqlDb }] = await Promise.all([
     import('@gmassisstant/backend') as Promise<{ app: { fetch: (r: Request) => Promise<Response> } }>,
-    import('@gmassisstant/backend/db') as unknown as Promise<{ db: Parameters<typeof migrate>[0] }>,
+    import('@gmassisstant/backend/db') as unknown as Promise<{ createLibsqlDb: () => Parameters<typeof migrate>[0] }>,
   ]);
+
+  const db = createLibsqlDb();
 
   await migrate(db, {
     migrationsFolder: isDev
