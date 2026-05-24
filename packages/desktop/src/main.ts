@@ -88,10 +88,33 @@ async function createWindow(port: number) {
   return win;
 }
 
-Menu.setApplicationMenu(null);
+const menu = Menu.buildFromTemplate([
+  {
+    label: 'GM Assistant',
+    submenu: [
+      {
+        label: 'Log in to YouTube…',
+        click() { ipcMain.emit('open-youtube-login'); },
+      },
+      { type: 'separator' },
+      { role: 'quit' },
+    ],
+  },
+]);
+Menu.setApplicationMenu(menu);
 
 ipcMain.on('set-fullscreen', (event, flag: boolean) => {
   BrowserWindow.fromWebContents(event.sender)?.setFullScreen(flag);
+});
+
+ipcMain.on('open-youtube-login', () => {
+  const win = new BrowserWindow({
+    width: 1024,
+    height: 768,
+    title: 'Log in to YouTube',
+    webPreferences: { contextIsolation: true },
+  });
+  win.loadURL('https://www.youtube.com');
 });
 
 electronApp.whenReady().then(async () => {

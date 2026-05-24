@@ -1,6 +1,20 @@
 import { useRouterState } from '@tanstack/react-router';
 import { useAudio } from '../hooks/useAudio';
 
+declare global {
+  interface Window {
+    electronAPI?: { setFullScreen(flag: boolean): void; openYouTubeLogin(): void };
+  }
+}
+
+function openYouTube() {
+  if (window.electronAPI) {
+    window.electronAPI.openYouTubeLogin();
+  } else {
+    window.open('https://www.youtube.com', '_blank', 'noopener');
+  }
+}
+
 export function AudioBar() {
   const { currentPathname } = useRouterState({
     select: (s) => ({ currentPathname: s.location.pathname }),
@@ -77,6 +91,7 @@ export function AudioBar() {
         />
         <span style={volLabel}>{volume}</span>
       </div>
+      <button style={ytLoginBtn} onClick={openYouTube} title="Log in to YouTube">YT</button>
     </div>
   );
 }
@@ -148,6 +163,17 @@ const btn: React.CSSProperties = {
 };
 
 const volWrap: React.CSSProperties = { display: 'flex', alignItems: 'center', gap: 6 };
+
+const ytLoginBtn: React.CSSProperties = {
+  background: 'transparent',
+  border: '1px solid #333',
+  color: '#666',
+  borderRadius: 4,
+  cursor: 'pointer',
+  fontSize: '0.65rem',
+  padding: '3px 6px',
+  whiteSpace: 'nowrap',
+};
 const volLabel: React.CSSProperties = { color: '#666', minWidth: 24, textAlign: 'center' };
 
 const progressTrack: React.CSSProperties = {
