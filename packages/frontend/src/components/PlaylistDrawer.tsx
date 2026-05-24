@@ -152,6 +152,12 @@ export function PlaylistDrawer({
                     onClick={() => setExpandedId(isExpanded ? null : pl.id)}
                     title={isExpanded ? 'Collapse' : 'Manage tracks'}
                   >{isExpanded ? '▲' : '▼'}</button>
+                  <a
+                    href={`/api/export/playlist/${pl.id}`}
+                    download
+                    style={{ ...s.iconBtn, color: '#555', textDecoration: 'none' } as React.CSSProperties}
+                    title="Export playlist"
+                  >↓</a>
                   <button
                     style={{ ...s.iconBtn, color: '#444' }}
                     onClick={() => { if (confirm(`Delete "${pl.name}"?`)) deletePlaylist.mutate(pl.id); }}

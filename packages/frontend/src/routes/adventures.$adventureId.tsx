@@ -7,6 +7,7 @@ import { Open5eSearch } from '../components/Open5eSearch';
 import { GmHeader } from '../components/GmHeader';
 import { StatBlockEditor } from '../components/StatBlockEditor';
 import { PlaylistDrawer } from '../components/PlaylistDrawer';
+import { ImportModal } from '../components/ImportModal';
 import { useAudio, type Playlist, type PlaylistTrack } from '../hooks/useAudio';
 
 // ── Types ────────────────────────────────────────────────────────────────────
@@ -212,6 +213,7 @@ function AdventureDetailPage() {
   const [editingPlayerId, setEditingPlayerId] = useState<number | null>(null);
   const [editingAdventure, setEditingAdventure] = useState(false);
   const [showPlaylistDrawer, setShowPlaylistDrawer] = useState(false);
+  const [showImportEncounter, setShowImportEncounter] = useState(false);
   const [adventureNameDraft, setAdventureNameDraft] = useState('');
   const [adventureDescDraft, setAdventureDescDraft] = useState('');
 
@@ -259,14 +261,22 @@ function AdventureDetailPage() {
     <div style={s.page}>
       <HoverStyles />
       <GmHeader rightSlot={
-        <button
-          type="button"
-          style={showPlaylistDrawer ? s.btnActive : s.btnSecondary}
-          onClick={() => setShowPlaylistDrawer(v => !v)}
-          title="Playlists"
-        >
-          🎵 Playlists
-        </button>
+        <>
+          <a
+            href={`/api/export/adventure/${adventureId}`}
+            download
+            style={s.btnSecondary as React.CSSProperties}
+            title="Export adventure as .gma.zip"
+          >↓ Export</a>
+          <button
+            type="button"
+            style={showPlaylistDrawer ? s.btnActive : s.btnSecondary}
+            onClick={() => setShowPlaylistDrawer(v => !v)}
+            title="Playlists"
+          >
+            🎵 Playlists
+          </button>
+        </>
       }>
         <Link to="/" style={s.back}>← Adventures</Link>
         {editingAdventure ? (
@@ -373,6 +383,14 @@ function AdventureDetailPage() {
           />
         )}
 
+        {showImportEncounter && (
+          <ImportModal
+            defaultTargetAdventureId={Number(adventureId)}
+            onClose={() => setShowImportEncounter(false)}
+            onSuccess={() => { setShowImportEncounter(false); invalidate(); }}
+          />
+        )}
+
         {/* Image Scenes */}
         <Section
           title="Image Scenes"
@@ -413,6 +431,9 @@ function AdventureDetailPage() {
           title="Encounters"
           count={data.encounters.length}
           addLabel="+ Add Encounter"
+          headerActions={
+            <button style={s.btnSecondary} onClick={() => setShowImportEncounter(true)}>↑ Import</button>
+          }
           addForm={(close) => (
             <EncounterForm
               onSubmit={(v) => addEncounter.mutate(v, { onSuccess: close })}
@@ -769,6 +790,12 @@ function EncounterCard({
               End
             </button>
           )}
+          <a
+            href={`/api/export/encounter/${encounter.id}`}
+            download
+            style={{ ...s.btnSecondarySmall, textDecoration: 'none' } as React.CSSProperties}
+            title="Export encounter"
+          >↓</a>
           <button style={s.btnSecondarySmall} onClick={() => setExpanded((v) => !v)}>
             {expanded ? 'Close' : 'Manage'}
           </button>
@@ -1156,22 +1183,26 @@ function typeStyle(type: Combatant['type']): React.CSSProperties {
 // ── Shared sub-components ────────────────────────────────────────────────────
 
 function Section({
-  title, count, addLabel, addForm, children,
+  title, count, addLabel, addForm, children, headerActions,
 }: {
   title: string;
   count: number;
   addLabel: string;
   addForm: (close: () => void) => React.ReactNode;
   children: React.ReactNode;
+  headerActions?: React.ReactNode;
 }) {
   const [open, setOpen] = useState(false);
   return (
     <section style={s.section}>
       <div style={s.sectionHeader}>
         <h2 style={s.sectionTitle}>{title} ({count})</h2>
-        <button style={s.btnPrimary} onClick={() => setOpen((v) => !v)}>
-          {open ? 'Cancel' : addLabel}
-        </button>
+        <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+          {headerActions}
+          <button style={s.btnPrimary} onClick={() => setOpen((v) => !v)}>
+            {open ? 'Cancel' : addLabel}
+          </button>
+        </div>
       </div>
       {open && addForm(() => setOpen(false))}
       {children}

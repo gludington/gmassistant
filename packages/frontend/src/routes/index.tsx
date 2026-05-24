@@ -1,9 +1,10 @@
-import { createFileRoute, Link } from '@tanstack/react-router';
+import { createFileRoute, Link, useNavigate } from '@tanstack/react-router';
 import { GmHeader } from '../components/GmHeader';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useState } from 'react';
 import type { Adventure } from '@gmassisstant/types';
 import { useBroadcastSender } from '../hooks/useBroadcast';
+import { ImportModal } from '../components/ImportModal';
 
 export const Route = createFileRoute('/')({
   component: DmHome,
@@ -27,6 +28,7 @@ async function createAdventure(data: { name: string; description: string }): Pro
 
 function DmHome() {
   const qc = useQueryClient();
+  const navigate = useNavigate();
   const send = useBroadcastSender();
   const { data: adventures, isLoading } = useQuery({ queryKey: ['adventures'], queryFn: fetchAdventures });
   const mutation = useMutation({
@@ -37,6 +39,7 @@ function DmHome() {
   const [name, setName] = useState('');
   const [description, setDescription] = useState('');
   const [showForm, setShowForm] = useState(false);
+  const [showImport, setShowImport] = useState(false);
 
   function blankPlayerScreen() {
     send({ type: 'CLEAR_IMAGE' });
@@ -71,9 +74,12 @@ function DmHome() {
       <main style={styles.main}>
         <div style={styles.sectionHeader}>
           <h2 style={styles.sectionTitle}>Adventures</h2>
-          <button style={styles.btnPrimary} onClick={() => setShowForm((v) => !v)}>
-            {showForm ? 'Cancel' : '+ New Adventure'}
-          </button>
+          <div style={{ display: 'flex', gap: 8 }}>
+            <button style={styles.btnSecondary} onClick={() => setShowImport(true)}>↑ Import</button>
+            <button style={styles.btnPrimary} onClick={() => setShowForm((v) => !v)}>
+              {showForm ? 'Cancel' : '+ New Adventure'}
+            </button>
+          </div>
         </div>
 
         {showForm && (
@@ -111,6 +117,18 @@ function DmHome() {
           )}
         </div>
       </main>
+      {showImport && (
+        <ImportModal
+          onClose={() => setShowImport(false)}
+          onSuccess={(result) => {
+            setShowImport(false);
+            qc.invalidateQueries({ queryKey: ['adventures'] });
+            if (result.type === 'adventure') {
+              navigate({ to: '/adventures/$adventureId', params: { adventureId: String(result.id) } });
+            }
+          }}
+        />
+      )}
     </div>
   );
 }
