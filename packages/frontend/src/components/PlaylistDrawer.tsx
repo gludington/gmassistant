@@ -136,7 +136,7 @@ export function PlaylistDrawer({
                 </div>
                 <div style={s.cardActions}>
                   <button
-                    style={{ ...s.modeBtn, color: pl.playMode === 'shuffle' ? '#c9a84c' : '#555' }}
+                    style={{ ...s.modeBtn, color: pl.playMode === 'shuffle' ? '#c9a84c' : '#888' }}
                     onClick={() => setPlayMode.mutate({ id: pl.id, playMode: pl.playMode === 'shuffle' ? 'sequential' : 'shuffle' })}
                     title={pl.playMode === 'shuffle' ? 'Shuffle (click for sequential)' : 'Sequential (click for shuffle)'}
                   >{pl.playMode === 'shuffle' ? '🔀' : '↕'}</button>
@@ -148,18 +148,18 @@ export function PlaylistDrawer({
                     >▶</button>
                   )}
                   <button
-                    style={{ ...s.iconBtn, color: isExpanded ? '#c9a84c' : '#555' }}
+                    style={{ ...s.iconBtn, color: isExpanded ? '#c9a84c' : '#aaa' }}
                     onClick={() => setExpandedId(isExpanded ? null : pl.id)}
                     title={isExpanded ? 'Collapse' : 'Manage tracks'}
                   >{isExpanded ? '▲' : '▼'}</button>
                   <a
                     href={`/api/export/playlist/${pl.id}`}
                     download
-                    style={{ ...s.iconBtn, color: '#555', textDecoration: 'none' } as React.CSSProperties}
+                    style={{ ...s.iconBtn, color: '#aaa', textDecoration: 'none' } as React.CSSProperties}
                     title="Export playlist"
                   >↓</a>
                   <button
-                    style={{ ...s.iconBtn, color: '#444' }}
+                    style={{ ...s.iconBtn, color: '#e05252' }}
                     onClick={() => { if (confirm(`Delete "${pl.name}"?`)) deletePlaylist.mutate(pl.id); }}
                     title="Delete playlist"
                   >✕</button>
