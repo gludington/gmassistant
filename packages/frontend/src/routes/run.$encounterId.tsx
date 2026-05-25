@@ -5,10 +5,10 @@ import type { LiveCombatant } from '@gmassisstant/types';
 import { useBroadcastSender, useBroadcastReceiver } from '../hooks/useBroadcast';
 import { CONDITIONS, conditionIcon } from '../conditions';
 import { Open5eSearch } from '../components/Open5eSearch';
-import { GmHeader } from '../components/GmHeader';
+import { GmHeader, dropdownItem, dropdownItemActive } from '../components/GmHeader';
 import { StatBlockEditor } from '../components/StatBlockEditor';
-import { PlaylistDrawer } from '../components/PlaylistDrawer';
 import { useAudio } from '../hooks/useAudio';
+import { useCurrentAdventure } from '../context/AdventureContext';
 
 // ── Types ────────────────────────────────────────────────────────────────────
 
@@ -98,15 +98,22 @@ function toRunCombatant(c: BaseCombatant): RunCombatant {
   if (c.statBlock) {
     try {
       const sb = JSON.parse(c.statBlock);
-      const hasLegendary = (sb.actions ?? []).some((a: { action_type?: string }) => a.action_type === 'LEGENDARY_ACTION');
+      const allActions: { action_type?: string; name?: string }[] = sb.actions ?? [];
+      const legendaryActionsArray: unknown[] = sb.legendary_actions ?? [];
+      const hasLegendary = allActions.some((a) => a.action_type === 'LEGENDARY_ACTION') || legendaryActionsArray.length > 0;
       if (hasLegendary) legendaryActionsMax = 3;
-      for (const trait of (sb.traits ?? []).concat(sb.actions ?? [])) {
+      const traitSources: { name?: string; desc?: string }[] =
+        (sb.traits ?? []).concat(sb.special_abilities ?? []).concat(allActions);
+      for (const trait of traitSources) {
         const name: string = trait.name ?? '';
         if (/legendary resistance/i.test(name)) {
           const m = /\((\d+)/i.exec(name);
           legendaryResistancesMax = m ? parseInt(m[1], 10) : 3;
           break;
         }
+      }
+      if (legendaryResistancesMax == null && typeof sb.legendary_resistance === 'number' && sb.legendary_resistance > 0) {
+        legendaryResistancesMax = sb.legendary_resistance;
       }
     } catch {}
   }
@@ -173,6 +180,7 @@ function EncounterRunner() {
   const navigate = useNavigate();
   const send = useBroadcastSender();
   const { playPlaylist } = useAudio();
+  const { setAdventureId } = useCurrentAdventure();
   const [combatants, setCombatants] = useState<RunCombatant[]>([]);
   const [showOnPlayer, setShowOnPlayer] = useState(() => {
     try {
@@ -188,7 +196,6 @@ function EncounterRunner() {
   const [activeCombatantId, setActiveCombatantId] = useState<number | null>(null);
   const [round, setRound] = useState(1);
   const [statBlockCombatant, setStatBlockCombatant] = useState<RunCombatant | null>(null);
-  const [showPlaylistDrawer, setShowPlaylistDrawer] = useState(false);
   const tempIdRef = useRef(-100000);
   const runKey = `gma:run:${encounterId}`;
 
@@ -204,6 +211,13 @@ function EncounterRunner() {
   });
 
   useEffect(() => {
+    if (encounter) {
+      setAdventureId(encounter.adventureId);
+      return () => setAdventureId(null);
+    }
+  }, [encounter?.adventureId]);
+
+  useEffect(() => {
     if (encounter && !initialized) {
       let newCombatants: RunCombatant[];
       let initRound = 1;
@@ -215,7 +229,43 @@ function EncounterRunner() {
       if (saved) {
         try {
           const parsed = JSON.parse(saved);
-          newCombatants = parsed.combatants as RunCombatant[];
+          const savedList = parsed.combatants as RunCombatant[];
+          // Include ALL saved combatants (players have negative ids too).
+          const savedById = new Map(savedList.map((c) => [c.id, c]));
+          const apiIds = new Set(encounter.combatants.map((c) => c.id));
+
+          // Drop combatants removed from the encounter.
+          // Temp combatants added mid-combat have large negative ids (≤ -100000) and
+          // no isAdventurePlayer flag — keep those unconditionally.
+          const merged = savedList
+            .filter((c) => {
+              if (c.id > 0 || c.isAdventurePlayer) return apiIds.has(c.id);
+              return true; // temp combatant added during this combat
+            })
+            .map((c) => {
+              const api = encounter.combatants.find((a) => a.id === c.id);
+              if (!api) return c; // temp combatant — no API entry
+              return {
+                ...c,
+                name: api.name,
+                maxHp: api.maxHp,
+                initiativeModifier: api.initiativeModifier,
+                color: api.color,
+                armorClass: api.armorClass ?? null,
+                spellDc: api.spellDc ?? null,
+                passivePerception: api.passivePerception ?? null,
+                statBlock: api.statBlock ?? null,
+                description: api.description ?? null,
+                visibleToPlayers: api.isAdventurePlayer ? true : (api.visibleToPlayers ?? c.visibleToPlayers),
+              };
+            });
+
+          // Add combatants newly added to the encounter since the run started.
+          for (const api of encounter.combatants) {
+            if (!savedById.has(api.id)) merged.push(toRunCombatant(api));
+          }
+
+          newCombatants = merged;
           initRound = parsed.round ?? 1;
           initActiveId = parsed.activeCombatantId ?? null;
           initShowOnPlayer = parsed.showOnPlayer ?? showOnPlayer;
@@ -301,16 +351,6 @@ function EncounterRunner() {
     const next = !showOnPlayer;
     setShowOnPlayer(next);
     broadcast(combatants, next);
-  }
-
-  function blankPlayerScreen() {
-    setShowOnPlayer(false);
-    send({ type: 'CLEAR_IMAGE' });
-    send({ type: 'TOGGLE_INITIATIVE', payload: { visible: false } });
-    try {
-      const raw = localStorage.getItem('gma:initiative');
-      if (raw) localStorage.setItem('gma:initiative', JSON.stringify({ ...JSON.parse(raw), visible: false }));
-    } catch {}
   }
 
   function applyAndBroadcast(next: RunCombatant[]) {
@@ -543,16 +583,21 @@ function EncounterRunner() {
 
   return (
     <div style={s.page}>
-      <GmHeader rightSlot={
-        <button
-          type="button"
-          style={showPlaylistDrawer ? s.btnActive : s.btnSecondary}
-          onClick={() => setShowPlaylistDrawer(v => !v)}
-          title="Playlists"
-        >
-          🎵 Playlists
-        </button>
-      }>
+      <GmHeader
+        playerMenuItems={
+          <>
+            <button style={showOnPlayer ? dropdownItemActive : dropdownItem} onClick={togglePlayer}>
+              {showOnPlayer ? '✔ Tracker visible' : '✗ Tracker hidden'}
+            </button>
+            <button style={showInitiative ? dropdownItemActive : dropdownItem} onClick={toggleShowInitiative}>
+              {showInitiative ? '✔ Initiative visible' : '✗ Initiative hidden'}
+            </button>
+            <button style={showHp ? dropdownItemActive : dropdownItem} onClick={toggleShowHp}>
+              {showHp ? '✔ HP visible' : '✗ HP hidden'}
+            </button>
+          </>
+        }
+      >
         <Link
           to="/adventures/$adventureId"
           params={{ adventureId: String(encounter.adventureId) }}
@@ -578,44 +623,8 @@ function EncounterRunner() {
           <button style={showAddForm ? s.btnHdrActive : s.btnHdr} onClick={() => setShowAddForm((v) => !v)}>
             {showAddForm ? '✕ Cancel' : '+ Add Combatant'}
           </button>
-          <button
-            style={s.btnHdr}
-            onClick={toggleShowInitiative}
-            title={showInitiative ? 'Hide initiative from player screen' : 'Show initiative on player screen'}
-          >
-            {showInitiative ? '⚔ Hide Initiative' : '⚔ Show Initiative'}
-          </button>
-          <button
-            style={s.btnHdr}
-            onClick={toggleShowHp}
-            title={showHp ? 'Hide HP from player screen' : 'Show HP on player screen'}
-          >
-            {showHp ? '❤ Hide HP' : '❤ Show HP'}
-          </button>
-          <button
-            style={showOnPlayer ? s.btnHdrActive : s.btnHdr}
-            onClick={togglePlayer}
-          >
-            {showOnPlayer ? '⬛ Hide Tracker' : '▶ Show Tracker'}
-          </button>
-          <button style={s.btnHdrDanger} onClick={blankPlayerScreen}>
-            Blank Screen
-          </button>
-          <button
-            style={s.btnHdr}
-            onClick={() => window.open('/player', 'gmassisstant-player', 'width=1920,height=1080')}
-          >
-            Player Screen
-          </button>
         </div>
       </GmHeader>
-
-      {showPlaylistDrawer && (
-        <PlaylistDrawer
-          adventureId={encounter.adventureId}
-          onClose={() => setShowPlaylistDrawer(false)}
-        />
-      )}
 
       <main style={s.main}>
         {showAddForm && (
@@ -1556,7 +1565,7 @@ const s: Record<string, React.CSSProperties> = {
   activeNav: {
     display: 'flex', alignItems: 'center', gap: 6,
     background: '#0f0f1f', border: '1px solid #2a2a4a', borderRadius: 6,
-    padding: '4px 8px',
+    padding: '4px 8px', flexShrink: 0, minWidth: 0,
   },
   roundLabel: {
     fontSize: '0.75rem', color: '#888', fontWeight: 600,
@@ -1570,7 +1579,8 @@ const s: Record<string, React.CSSProperties> = {
   },
   activeName: {
     fontSize: '0.9rem', color: '#c9a84c', fontWeight: 600,
-    minWidth: 120, textAlign: 'center' as const,
+    minWidth: 80, maxWidth: 180, textAlign: 'center' as const,
+    overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' as const,
   },
   main: { padding: '24px 32px', maxWidth: 1400, margin: '0 auto' },
   muted: { color: '#666', fontStyle: 'italic' },

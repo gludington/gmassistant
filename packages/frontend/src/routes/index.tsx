@@ -1,9 +1,9 @@
 import { createFileRoute, Link, useNavigate } from '@tanstack/react-router';
 import { GmHeader } from '../components/GmHeader';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import type { Adventure } from '@gmassisstant/types';
-import { useBroadcastSender } from '../hooks/useBroadcast';
+import { useCurrentAdventure } from '../context/AdventureContext';
 import { ImportModal } from '../components/ImportModal';
 
 export const Route = createFileRoute('/')({
@@ -29,8 +29,10 @@ async function createAdventure(data: { name: string; description: string }): Pro
 function DmHome() {
   const qc = useQueryClient();
   const navigate = useNavigate();
-  const send = useBroadcastSender();
+  const { setAdventureId } = useCurrentAdventure();
   const { data: adventures, isLoading } = useQuery({ queryKey: ['adventures'], queryFn: fetchAdventures });
+
+  useEffect(() => { setAdventureId(null); }, []);
   const mutation = useMutation({
     mutationFn: createAdventure,
     onSuccess: () => qc.invalidateQueries({ queryKey: ['adventures'] }),
@@ -41,15 +43,6 @@ function DmHome() {
   const [showForm, setShowForm] = useState(false);
   const [showImport, setShowImport] = useState(false);
 
-  function blankPlayerScreen() {
-    send({ type: 'CLEAR_IMAGE' });
-    send({ type: 'TOGGLE_INITIATIVE', payload: { visible: false } });
-    try {
-      const raw = localStorage.getItem('gma:initiative');
-      if (raw) localStorage.setItem('gma:initiative', JSON.stringify({ ...JSON.parse(raw), visible: false }));
-    } catch {}
-  }
-
   function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     if (!name.trim()) return;
@@ -58,24 +51,17 @@ function DmHome() {
     });
   }
 
-  function openPlayerWindow() {
-    window.open('/player', 'gmassisstant-player', 'width=1920,height=1080');
-  }
-
   return (
     <div style={styles.page}>
       <GmHeader>
         <h1 style={styles.title}>GM Assistant</h1>
-        <div style={{ flex: 1 }} />
-        <button style={styles.btnDanger} onClick={blankPlayerScreen}>Blank Screen</button>
-        <button style={styles.btnSecondary} onClick={openPlayerWindow}>Open Player Screen</button>
       </GmHeader>
 
       <main style={styles.main}>
         <div style={styles.sectionHeader}>
           <h2 style={styles.sectionTitle}>Adventures</h2>
           <div style={{ display: 'flex', gap: 8 }}>
-            <button style={styles.btnSecondary} onClick={() => setShowImport(true)}>↑ Import</button>
+            <button style={styles.btnSecondary} onClick={() => setShowImport(true)}>↑ Import Adventure</button>
             <button style={styles.btnPrimary} onClick={() => setShowForm((v) => !v)}>
               {showForm ? 'Cancel' : '+ New Adventure'}
             </button>

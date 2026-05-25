@@ -2,11 +2,11 @@ import { createFileRoute, Link } from '@tanstack/react-router';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useState, useRef, useEffect } from 'react';
 import { useBroadcastSender } from '../hooks/useBroadcast';
+import { useCurrentAdventure } from '../context/AdventureContext';
 import type { SceneFit } from '@gmassisstant/types';
 import { Open5eSearch } from '../components/Open5eSearch';
-import { GmHeader } from '../components/GmHeader';
+import { GmHeader, dropdownItem, dropdownItemActive } from '../components/GmHeader';
 import { StatBlockEditor } from '../components/StatBlockEditor';
-import { PlaylistDrawer } from '../components/PlaylistDrawer';
 import { ImportModal } from '../components/ImportModal';
 import { useAudio, type Playlist, type PlaylistTrack } from '../hooks/useAudio';
 
@@ -95,6 +95,12 @@ function AdventureDetailPage() {
   const qc = useQueryClient();
   const qKey = ['adventure', adventureId];
   const send = useBroadcastSender();
+  const { setAdventureId } = useCurrentAdventure();
+
+  useEffect(() => {
+    setAdventureId(Number(adventureId));
+    return () => setAdventureId(null);
+  }, [adventureId]);
 
   const { data, isLoading } = useQuery<AdventureDetail>({
     queryKey: qKey,
@@ -106,15 +112,6 @@ function AdventureDetailPage() {
   });
 
   const invalidate = () => qc.invalidateQueries({ queryKey: qKey });
-
-  function blankPlayerScreen() {
-    send({ type: 'CLEAR_IMAGE' });
-    send({ type: 'TOGGLE_INITIATIVE', payload: { visible: false } });
-    try {
-      const raw = localStorage.getItem('gma:initiative');
-      if (raw) localStorage.setItem('gma:initiative', JSON.stringify({ ...JSON.parse(raw), visible: false }));
-    } catch {}
-  }
 
   const toggleShowHp = useMutation({
     mutationFn: async (showHp: boolean) => {
@@ -198,6 +195,17 @@ function AdventureDetailPage() {
     onSuccess: invalidate,
   });
 
+  const renameScene = useMutation({
+    mutationFn: async ({ id, name }: { id: number; name: string }) => {
+      await fetch(`/api/adventures/scenes/${id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name }),
+      });
+    },
+    onSuccess: invalidate,
+  });
+
   const addPlayer = useMutation({
     mutationFn: async (body: { name: string; maxHp: number; initiativeModifier: number; color: string; armorClass: number | null; spellDc: number | null; passivePerception: number | null }) => {
       const res = await fetch('/api/adventures/players', {
@@ -212,7 +220,6 @@ function AdventureDetailPage() {
 
   const [editingPlayerId, setEditingPlayerId] = useState<number | null>(null);
   const [editingAdventure, setEditingAdventure] = useState(false);
-  const [showPlaylistDrawer, setShowPlaylistDrawer] = useState(false);
   const [showImportEncounter, setShowImportEncounter] = useState(false);
   const [adventureNameDraft, setAdventureNameDraft] = useState('');
   const [adventureDescDraft, setAdventureDescDraft] = useState('');
@@ -260,24 +267,35 @@ function AdventureDetailPage() {
   return (
     <div style={s.page}>
       <HoverStyles />
-      <GmHeader rightSlot={
-        <>
+      <GmHeader
+        onPlaylistChange={invalidate}
+        rightSlot={
           <a
             href={`/api/export/adventure/${adventureId}`}
             download
             style={s.btnSecondary as React.CSSProperties}
             title="Export adventure as .gma.zip"
-          >↓ Export</a>
-          <button
-            type="button"
-            style={showPlaylistDrawer ? s.btnActive : s.btnSecondary}
-            onClick={() => setShowPlaylistDrawer(v => !v)}
-            title="Playlists"
-          >
-            🎵 Playlists
-          </button>
-        </>
-      }>
+          >↓ Export Adventure</a>
+        }
+        playerMenuItems={
+          <>
+            <button
+              style={data.showInitiative ? dropdownItemActive : dropdownItem}
+              onClick={() => toggleShowInitiative.mutate(!data.showInitiative)}
+              disabled={toggleShowInitiative.isPending}
+            >
+              {data.showInitiative ? '✔ Initiative visible' : '✗ Initiative hidden'}
+            </button>
+            <button
+              style={data.showHp ? dropdownItemActive : dropdownItem}
+              onClick={() => toggleShowHp.mutate(!data.showHp)}
+              disabled={toggleShowHp.isPending}
+            >
+              {data.showHp ? '✔ HP visible' : '✗ HP hidden'}
+            </button>
+          </>
+        }
+      >
         <Link to="/" style={s.back}>← Adventures</Link>
         {editingAdventure ? (
           <form
@@ -303,33 +321,11 @@ function AdventureDetailPage() {
             />
           </form>
         ) : (
-          <div style={{ display: 'flex', alignItems: 'center', gap: 8, flex: 1 }}>
-            <h1 style={s.title}>{data.name}</h1>
-            <button style={s.btnGhost} onClick={startEditingAdventure} title="Edit adventure name">✎</button>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8, flex: 1, minWidth: 0 }}>
+            <h1 style={{ ...s.title, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', minWidth: 0 }}>{data.name}</h1>
+            <button style={{ ...s.btnGhost, flexShrink: 0 }} onClick={startEditingAdventure} title="Edit adventure name">✎</button>
           </div>
         )}
-        <button
-          style={data.showInitiative ? s.btnActive : s.btnSecondary}
-          onClick={() => toggleShowInitiative.mutate(!data.showInitiative)}
-          disabled={toggleShowInitiative.isPending}
-          title={data.showInitiative ? 'Hide initiative from player screen' : 'Show initiative on player screen'}
-        >
-          {data.showInitiative ? '⚔ Hide Initiative' : '⚔ Show Initiative'}
-        </button>
-        <button
-          style={data.showHp ? s.btnActive : s.btnSecondary}
-          onClick={() => toggleShowHp.mutate(!data.showHp)}
-          disabled={toggleShowHp.isPending}
-          title={data.showHp ? 'Hide HP from player screen' : 'Show HP on player screen'}
-        >
-          {data.showHp ? '❤ Hide HP' : '❤ Show HP'}
-        </button>
-        <button style={s.btnDanger} onClick={blankPlayerScreen}>
-          Blank Screen
-        </button>
-        <button style={s.btnSecondary} onClick={() => window.open('/player', 'gmassisstant-player', 'width=1920,height=1080')}>
-          Open Player Screen
-        </button>
       </GmHeader>
 
       <main style={s.main}>
@@ -375,14 +371,6 @@ function AdventureDetailPage() {
           ))}
         </Section>
 
-        {showPlaylistDrawer && (
-          <PlaylistDrawer
-            adventureId={Number(adventureId)}
-            onClose={() => setShowPlaylistDrawer(false)}
-            onInvalidate={invalidate}
-          />
-        )}
-
         {showImportEncounter && (
           <ImportModal
             defaultTargetAdventureId={Number(adventureId)}
@@ -411,6 +399,7 @@ function AdventureDetailPage() {
               key={scene.id}
               scene={scene}
               playlists={data.playlists}
+              onRename={(name) => renameScene.mutate({ id: scene.id, name })}
               onDelete={() => deleteScene.mutate(scene.id)}
               onInvalidate={invalidate}
               onSend={(filePath, fit) => {
@@ -432,7 +421,7 @@ function AdventureDetailPage() {
           count={data.encounters.length}
           addLabel="+ Add Encounter"
           headerActions={
-            <button style={s.btnSecondary} onClick={() => setShowImportEncounter(true)}>↑ Import</button>
+            <button style={s.btnSecondary} onClick={() => setShowImportEncounter(true)}>↑ Import Encounter</button>
           }
           addForm={(close) => (
             <EncounterForm
@@ -462,6 +451,7 @@ function AdventureDetailPage() {
 function SceneCard({
   scene,
   playlists,
+  onRename,
   onDelete,
   onInvalidate,
   onSend,
@@ -469,12 +459,15 @@ function SceneCard({
 }: {
   scene: ImageScene;
   playlists: Playlist[];
+  onRename: (name: string) => void;
   onDelete: () => void;
   onInvalidate: () => void;
   onSend: (filePath: string, fit: SceneFit) => void;
   onClearPlayer: () => void;
 }) {
   const [expanded, setExpanded] = useState(false);
+  const [editingName, setEditingName] = useState(false);
+  const [nameDraft, setNameDraft] = useState('');
   const [uploading, setUploading] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const { playPlaylist } = useAudio();
@@ -603,14 +596,34 @@ function SceneCard({
     <div style={s.sceneWrapper}>
       <div style={s.card}>
         <div style={s.cardBody}>
-          <strong style={s.cardTitle}>{scene.name}</strong>
+          {editingName ? (
+            <form
+              style={{ display: 'flex', gap: 6, alignItems: 'center' }}
+              onSubmit={(e) => { e.preventDefault(); const n = nameDraft.trim(); if (n) onRename(n); setEditingName(false); }}
+            >
+              <input
+                style={{ ...s.editInput, fontSize: '0.875rem', flex: 1 }}
+                value={nameDraft}
+                autoFocus
+                onChange={(e) => setNameDraft(e.target.value)}
+                onKeyDown={(e) => { if (e.key === 'Escape') setEditingName(false); }}
+              />
+              <button style={s.btnSecondarySmall} type="submit" disabled={!nameDraft.trim()}>Save</button>
+              <button style={s.btnGhost} type="button" onClick={() => setEditingName(false)}>✕</button>
+            </form>
+          ) : (
+            <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+              <strong style={s.cardTitle}>{scene.name}</strong>
+              <button style={s.btnIcon} onClick={() => { setNameDraft(scene.name); setEditingName(true); }} title="Rename scene">✎</button>
+            </div>
+          )}
         </div>
         <div style={s.cardRight}>
           <span style={s.badge}>{scene.images.length} images</span>
           <button style={s.btnSecondarySmall} onClick={() => setExpanded((v) => !v)}>
             {expanded ? 'Close' : 'Manage'}
           </button>
-          <button style={s.btnIcon} onClick={onDelete}>✕</button>
+          <button style={{ ...s.btnIcon, color: '#ef5350' }} onClick={onDelete} title="Delete scene">✕</button>
         </div>
       </div>
 
@@ -795,7 +808,7 @@ function EncounterCard({
             download
             style={{ ...s.btnSecondarySmall, textDecoration: 'none' } as React.CSSProperties}
             title="Export encounter"
-          >↓</a>
+          >↓ Export Encounter</a>
           <button style={s.btnSecondarySmall} onClick={() => setExpanded((v) => !v)}>
             {expanded ? 'Close' : 'Manage'}
           </button>
@@ -1266,7 +1279,7 @@ function EncounterForm({
 
 const s: Record<string, React.CSSProperties> = {
   page: { minHeight: '100vh', background: '#1a1a2e', color: '#e0e0e0', paddingBottom: 60 },
-  back: { color: '#c9a84c', textDecoration: 'none', fontSize: '0.875rem' },
+  back: { color: '#c9a84c', textDecoration: 'none', fontSize: '0.875rem', whiteSpace: 'nowrap' },
   title: { margin: 0, fontSize: '1.5rem', color: '#c9a84c' },
   main: { padding: '32px', maxWidth: 900, margin: '0 auto' },
   desc: { color: '#999', marginBottom: 32 },

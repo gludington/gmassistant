@@ -1,6 +1,7 @@
 import { createRootRoute, Outlet, useRouterState } from '@tanstack/react-router';
 import { AudioProvider } from '../hooks/useAudio';
 import { AudioBar } from '../components/AudioBar';
+import { AdventureProvider } from '../context/AdventureContext';
 
 export const Route = createRootRoute({
   component: Root,
@@ -13,9 +14,11 @@ function Root() {
     return <Outlet />;
   }
   return (
-    <AudioProvider>
-      <Outlet />
-      <AudioBar />
-    </AudioProvider>
+    <AdventureProvider>
+      <AudioProvider>
+        <Outlet />
+        <AudioBar />
+      </AudioProvider>
+    </AdventureProvider>
   );
 }
