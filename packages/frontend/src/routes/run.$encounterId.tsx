@@ -201,13 +201,14 @@ function EncounterRunner() {
 
   useEffect(() => { send({ type: 'CLEAR_IMAGE' }); }, []);
 
-  const { data: encounter, isLoading } = useQuery<EncounterData>({
+  const { data: encounter, isLoading, isFetching } = useQuery<EncounterData>({
     queryKey: ['encounter', encounterId],
     queryFn: async () => {
       const res = await fetch(`/api/encounters/${encounterId}`);
       if (!res.ok) throw new Error('Failed to load encounter');
       return res.json();
     },
+    refetchOnMount: 'always',
   });
 
   useEffect(() => {
@@ -218,7 +219,7 @@ function EncounterRunner() {
   }, [encounter?.adventureId]);
 
   useEffect(() => {
-    if (encounter && !initialized) {
+    if (encounter && !initialized && !isFetching) {
       let newCombatants: RunCombatant[];
       let initRound = 1;
       let initActiveId: number | null = null;
@@ -296,7 +297,7 @@ function EncounterRunner() {
           .catch(() => {});
       }
     }
-  }, [encounter, initialized]);
+  }, [encounter, initialized, isFetching]);
 
   // Persist live encounter state so it survives navigation away and back.
   useEffect(() => {
@@ -395,12 +396,14 @@ function EncounterRunner() {
   function endEncounter() {
     if (!encounter) return;
     localStorage.removeItem(runKey);
-    send({ type: 'CLEAR_IMAGE' });
-    send({ type: 'TOGGLE_INITIATIVE', payload: { visible: false } });
-    try {
-      const raw = localStorage.getItem('gma:initiative');
-      if (raw) localStorage.setItem('gma:initiative', JSON.stringify({ ...JSON.parse(raw), visible: false }));
-    } catch {}
+    if (showOnPlayer) {
+      send({ type: 'CLEAR_IMAGE' });
+      send({ type: 'TOGGLE_INITIATIVE', payload: { visible: false } });
+      try {
+        const raw = localStorage.getItem('gma:initiative');
+        if (raw) localStorage.setItem('gma:initiative', JSON.stringify({ ...JSON.parse(raw), visible: false }));
+      } catch {}
+    }
     navigate({ to: '/adventures/$adventureId', params: { adventureId: String(encounter.adventureId) } });
   }
 
@@ -1579,8 +1582,9 @@ const s: Record<string, React.CSSProperties> = {
   },
   activeName: {
     fontSize: '0.9rem', color: '#c9a84c', fontWeight: 600,
-    minWidth: 80, maxWidth: 180, textAlign: 'center' as const,
+    width: 180, textAlign: 'center' as const,
     overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' as const,
+    flexShrink: 0,
   },
   main: { padding: '24px 32px', maxWidth: 1400, margin: '0 auto' },
   muted: { color: '#666', fontStyle: 'italic' },
