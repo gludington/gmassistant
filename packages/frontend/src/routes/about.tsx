@@ -1,4 +1,5 @@
-import { createFileRoute } from '@tanstack/react-router';
+import React from 'react';
+import { createFileRoute, Link } from '@tanstack/react-router';
 import { GmHeader } from '../components/GmHeader';
 
 export const Route = createFileRoute('/about')({
@@ -8,23 +9,31 @@ export const Route = createFileRoute('/about')({
 // ── Content helpers ───────────────────────────────────────────────────────────
 // Use these components to author the page. Each maps to a named style below.
 //
-//   <Section>                  top-level content block, adds vertical spacing
-//   <H2>                       section heading (gold, underlined)
-//   <H3>                       subsection heading (muted gold, uppercase small)
-//   <P>                        body paragraph
-//   <Lead>                     intro / pull-quote paragraph (left gold border)
-//   <Ul>                       unordered list wrapper
-//   <Li>                       list item (◆ gold bullet)
-//   <Figure src caption="…">  image with optional caption
+//   <Section>                      top-level content block, adds vertical spacing
+//   <H2>                           section heading (gold, underlined)
+//   <H3>                           subsection heading (muted gold, uppercase small)
+//   <P>                            body paragraph
+//   <Lead>                         intro / pull-quote paragraph (left gold border)
+//   <Ul>                           unordered list — wrap <Li> items
+//   <Li>                           unordered list item (◆ gold bullet)
+//   <Ol>                           ordered list — wrap <OlLi> items; numbers auto-injected
+//   <OlLi>                         ordered list item (gold number, same layout as Li)
+//   <A href="…">                   external link (gold, opens in new tab)
+//   <SiteLink to="/page">          internal link (gold, same-tab TanStack navigation)
+//   <Figure src="…" caption="…">  image with optional caption
 //
 // Example:
 //   <Section>
 //     <H2>Section Title</H2>
 //     <P>Body text. Inline <strong>bold</strong> and <em>italic</em> work normally.</P>
+//     <P>External: <A href="https://example.com">link text</A>. Internal: <SiteLink to="/help">Help</SiteLink>.</P>
 //     <Ul>
-//       <Li>First point</Li>
-//       <Li>Second point</Li>
+//       <Li>Unordered point</Li>
 //     </Ul>
+//     <Ol>
+//       <OlLi>First step</OlLi>
+//       <OlLi>Second step</OlLi>
+//     </Ol>
 //     <Figure src="/screenshots/player-screen.png" caption="The player-facing screen." />
 //   </Section>
 
@@ -54,6 +63,33 @@ function Li({ children }: { children: React.ReactNode }) {
     </li>
   );
 }
+// Ol auto-injects a 1-based index into each OlLi child.
+function Ol({ children }: { children: React.ReactNode }) {
+  return (
+    <ol style={s.ol}>
+      {React.Children.map(children, (child, i) =>
+        React.isValidElement(child)
+          ? React.cloneElement(child as React.ReactElement<{ _index: number }>, { _index: i + 1 })
+          : child
+      )}
+    </ol>
+  );
+}
+function OlLi({ children, _index }: { children: React.ReactNode; _index?: number }) {
+  return (
+    <li style={s.li}>
+      <span style={s.olNumber}>{_index ?? '1'}.</span>
+      {children}
+    </li>
+  );
+}
+function A({ href, children }: { href: string; children: React.ReactNode }) {
+  return <a href={href} style={s.a} target="_blank" rel="noopener noreferrer">{children}</a>;
+}
+function SiteLink({ to, children }: { to: string; children: React.ReactNode }) {
+  return <Link to={to as Parameters<typeof Link>[0]['to']} style={s.a}>{children}</Link>;
+}
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
 function Figure({ src, caption }: { src: string; caption?: string }) {
   return (
     <figure style={s.figure}>
@@ -77,8 +113,9 @@ function AboutPage() {
         <Section>
           <Lead>
             GM Assistant is a session management tool built for tabletop game masters who want
-            to keep their eyes on the table — not on a spreadsheet. Run it on your laptop while
-            a second monitor or TV shows the Player Screen to your players.
+            to keep their eyes on the table — not on a spreadsheet. Use the GM screen to help
+            run your encounters, or put a second monitor or TV screen in front of your players
+            to show Player views both in and out of combat.
           </Lead>
         </Section>
 
@@ -94,7 +131,7 @@ function AboutPage() {
             <Li>Build encounters with PCs, NPCs, enemies, groups, events, and lair actions — each with stat blocks, conditions, and live HP bars.</Li>
             <Li>Push images and an initiative tracker to a dedicated Player Screen at the click of a button.</Li>
             <Li>Play ambient audio from uploaded files or YouTube, with shuffle, per-playlist play modes, and automatic handoff between scenes.</Li>
-            <Li>Import monsters directly from the Open5e database, complete with full stat blocks and legendary action tracking.</Li>
+            <Li>Import monsters directly from the <A href="https://open5e.com/">Open5e</A> database, complete with full stat blocks and legendary action tracking.</Li>
           </Ul>
         </Section>
 
@@ -126,12 +163,24 @@ function AboutPage() {
         <Section>
           <H2>Running Locally vs. Desktop</H2>
           <P>
-            GM Assistant can be run as a local web server or as a self-contained desktop application.
+            GM Assistant runs in two modes. The web/dev mode is for development or running it
+            as a local server; the desktop app is a self-contained Electron build for everyday use.
           </P>
-          <Ul>
-            <Li><strong>Web / dev mode</strong> — run <code>pnpm dev</code> from the repo root. The GM interface is at <code>localhost:5173</code> and the Player Screen at <code>localhost:5173/player</code>.</Li>
-            <Li><strong>Desktop app</strong> — the packaged Electron build bundles its own server and SQLite database. No internet connection required except for YouTube playback. Data persists in your OS user-data folder across updates.</Li>
-          </Ul>
+          <H3>Web / Dev Mode</H3>
+          <P>
+            Run <code>pnpm dev</code> from the repo root. The GM interface is at{' '}
+            <code>localhost:5173</code> and the Player Screen at <code>localhost:5173/player</code>.
+          </P>
+          <H3>Desktop App</H3>
+          <P>
+            The packaged Electron build bundles its own server and SQLite database. It works
+            completely offline and data persists in your OS user-data folder across updates.
+            The only features that require an internet connection are:
+          </P>
+          <Ol>
+            <OlLi>Stat block import from <A href="https://open5e.com/">Open5e</A></OlLi>
+            <OlLi><A href="https://www.youtube.com/">YouTube</A> audio playback</OlLi>
+          </Ol>
         </Section>
 
         <Section>
@@ -149,8 +198,9 @@ function AboutPage() {
             <Li><strong>Frontend</strong> — React 18, Vite, TanStack Router, TanStack Query</Li>
             <Li><strong>Backend</strong> — Hono, Drizzle ORM, LibSQL / SQLite</Li>
             <Li><strong>Desktop</strong> — Electron wrapping the same Hono backend</Li>
-            <Li><strong>Monster data</strong> — Open5e API (open5e.com), used under their open licence</Li>
+            <Li><strong>Monster data</strong> — <A href="https://open5e.com/">Open5e API</A>, used under their open licence</Li>
           </Ul>
+          <P>See also: <SiteLink to="/help">Help page</SiteLink> for a full feature walkthrough.</P>
         </Section>
 
       </main>
@@ -207,10 +257,14 @@ const s: Record<string, React.CSSProperties> = {
     paddingLeft: 16,
   },
 
-  // List
+  // Ul — unordered list
   ul: { margin: '0 0 12px', padding: 0, listStyle: 'none' },
+
+  // Ol — ordered list (numbers rendered by OlLi)
+  ol: { margin: '0 0 12px', padding: 0, listStyle: 'none' },
+
+  // Shared li layout (used by both Li and OlLi)
   li: {
-    position: 'relative',
     display: 'flex',
     gap: 10,
     alignItems: 'baseline',
@@ -219,11 +273,32 @@ const s: Record<string, React.CSSProperties> = {
     lineHeight: 1.65,
     color: '#ccc',
   },
+
+  // ◆ bullet for Ul items
   bullet: {
     color: '#c9a84c',
     fontSize: '0.45rem',
     flexShrink: 0,
     marginTop: '0.55em',
+  },
+
+  // Number for Ol items
+  olNumber: {
+    color: '#c9a84c',
+    fontSize: '0.8rem',
+    fontWeight: 700,
+    flexShrink: 0,
+    minWidth: '1.4em',
+    textAlign: 'right',
+  },
+
+  // A / SiteLink — inline links
+  a: {
+    color: '#c9a84c',
+    textDecoration: 'underline',
+    textDecorationColor: '#c9a84c55',
+    textUnderlineOffset: '3px',
+    cursor: 'pointer',
   },
 
   // Figure / image
