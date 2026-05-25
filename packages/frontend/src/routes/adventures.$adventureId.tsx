@@ -170,8 +170,12 @@ function AdventureDetailPage() {
   const deleteEncounter = useMutation({
     mutationFn: async (id: number) => {
       await fetch(`/api/encounters/${id}`, { method: 'DELETE' });
+      return id;
     },
-    onSuccess: invalidate,
+    onSuccess: (id) => {
+      localStorage.removeItem(`gma:run:${id}`);
+      invalidate();
+    },
   });
 
   const addScene = useMutation({
