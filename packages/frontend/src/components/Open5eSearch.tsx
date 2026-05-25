@@ -8,6 +8,7 @@ interface MonsterHit {
   challenge_rating_decimal: number;
   type: string | { name: string; key: string };
   document?: { display_name: string };
+  [key: string]: unknown;
 }
 
 interface ApiResponse {
@@ -61,18 +62,13 @@ export function Open5eSearch({ onSelect, style }: Props) {
     return () => clearTimeout(t);
   }, [query]);
 
-  async function pick(m: MonsterHit) {
-    let statBlock: string | undefined;
-    try {
-      const res = await fetch(`https://api.open5e.com/v2/creatures/${m.key}/`);
-      if (res.ok) statBlock = await res.text();
-    } catch {}
+  function pick(m: MonsterHit) {
     onSelect({
       name: m.name,
       maxHp: m.hit_points,
       initiativeModifier: m.initiative_bonus ?? 0,
       type: 'enemy',
-      statBlock,
+      statBlock: JSON.stringify(m),
     });
     setOpen(false);
     setQuery('');

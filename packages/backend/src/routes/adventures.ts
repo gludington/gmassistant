@@ -124,6 +124,15 @@ router.post('/scenes', zValidator('json', sceneSchema), async (c) => {
   return c.json(created, 201);
 });
 
+router.patch('/scenes/:sceneId', zValidator('json', z.object({ name: z.string().min(1) })), async (c) => {
+  const db = c.var.db;
+  const sceneId = Number(c.req.param('sceneId'));
+  const { name } = c.req.valid('json');
+  const [updated] = await db.update(imageScenes).set({ name }).where(eq(imageScenes.id, sceneId)).returning();
+  if (!updated) return c.json({ error: 'Not found' }, 404);
+  return c.json(updated);
+});
+
 router.delete('/scenes/:sceneId', async (c) => {
   const db = c.var.db;
   const sceneId = Number(c.req.param('sceneId'));
