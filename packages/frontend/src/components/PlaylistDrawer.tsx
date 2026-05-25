@@ -157,7 +157,7 @@ export function PlaylistDrawer({
                     style={{ ...s.modeBtn, color: pl.loop ? '#c9a84c' : '#888' }}
                     onClick={() => setLoop.mutate({ id: pl.id, loop: !pl.loop })}
                     title={pl.loop ? 'Loop on (click to turn off)' : 'Loop off (click to turn on)'}
-                  >🔁</button>
+                  >{pl.loop ? '🔁' : '↺'}</button>
                   {pl.tracks.length > 0 && (
                     <button
                       style={{ ...s.iconBtn, color: isPlaying ? '#c9a84c' : '#aaa' }}

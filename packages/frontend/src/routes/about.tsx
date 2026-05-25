@@ -21,6 +21,7 @@ export const Route = createFileRoute('/about')({
 //   <A href="…">                   external link (gold, opens in new tab)
 //   <SiteLink to="/page">          internal link (gold, same-tab TanStack navigation)
 //   <Figure src="…" caption="…">  image with optional caption
+//   <FaqItem question="…">        collapsible FAQ entry (details/summary); nest inside a <Section>
 //
 // Example:
 //   <Section>
@@ -89,6 +90,14 @@ function A({ href, children }: { href: string; children: React.ReactNode }) {
 function SiteLink({ to, children }: { to: string; children: React.ReactNode }) {
   return <Link to={to as Parameters<typeof Link>[0]['to']} style={s.a}>{children}</Link>;
 }
+function FaqItem({ question, children }: { question: string; children: React.ReactNode }) {
+  return (
+    <details style={s.faqDetails}>
+      <summary style={s.faqSummary}>{question}</summary>
+      <div style={s.faqBody}>{children}</div>
+    </details>
+  );
+}
 // eslint-disable-next-line @typescript-eslint/no-unused-vars
 function Figure({ src, caption }: { src: string; caption?: string }) {
   return (
@@ -128,19 +137,22 @@ function AboutPage() {
           </P>
           <Ul>
             <Li>Manage multiple adventures, each with their own cast of players, scenes, encounters, and playlists.</Li>
-            <Li>Build encounters with PCs, NPCs, enemies, groups, events, and lair actions — each with stat blocks, conditions, and live HP bars.</Li>
+            <Li>Build encounters with PCs, enemies, groups, events, and lair actions — each with stat blocks, conditions, and live HP bars.</Li>
             <Li>Push images and an initiative tracker to a dedicated Player Screen at the click of a button.</Li>
-            <Li>Play ambient audio from uploaded files or YouTube, with shuffle, per-playlist play modes, and automatic handoff between scenes.</Li>
+            <Li>Play audio from uploaded files or YouTube, with shuffle, per-playlist play modes, and automatic handoff between scenes.</Li>
             <Li>Import monsters directly from the <A href="https://open5e.com/">Open5e</A> database, complete with full stat blocks and legendary action tracking.</Li>
           </Ul>
         </Section>
 
         <Section>
           <H2>How It Works</H2>
+          <H3>The GM Screen</H3>
+          <p>The GM Screen is the central hub for managing your game session. From here, you can create and manage adventures, encounters, playlists, and scenes,
+            as well as track initiative, hit points, and conditions during combat.</p>
           <H3>The Two-Screen Setup</H3>
           <P>
-            Click <strong>🖥 Player Window → Open Player Screen</strong> from any GM page to open
-            the player-facing view. Drag it to your second monitor and maximise it. Everything you
+            If you have a second monitor or TV screen, you can show a player-facing view using <strong>🖥 Player Window → Open Player Screen</strong> 
+            Drag it to your second monitor and maximise it. Everything you
             send from the GM side — images, the initiative tracker, HP changes — is pushed there
             in real time via a broadcast channel. No polling, no refresh.
           </P>
@@ -199,8 +211,85 @@ function AboutPage() {
             <Li><strong>Backend</strong> — Hono, Drizzle ORM, LibSQL / SQLite</Li>
             <Li><strong>Desktop</strong> — Electron wrapping the same Hono backend</Li>
             <Li><strong>Monster data</strong> — <A href="https://open5e.com/">Open5e API</A>, used under their open licence</Li>
+            <li><strong>YouTube audio</strong> — played through the YouTube API with iframe optionally visible.</li>
           </Ul>
           <P>See also: <SiteLink to="/help">Help page</SiteLink> for a full feature walkthrough.</P>
+        </Section>
+        <Section>
+          <H2>Frequently Asked Questions</H2>
+
+          <FaqItem question="Does it work offline?">
+            <P>
+              Almost entirely. The desktop app bundles its own server and database and requires no
+              internet connection for normal use. The two exceptions are importing monster stat blocks
+              from <A href="https://open5e.com/">Open5e</A> and playing YouTube audio, both of which
+              stream from external services.
+            </P>
+          </FaqItem>
+
+          <FaqItem question="Can multiple GMs use it at the same time?">
+            <P>
+              Not currently. GM Assistant is designed as a single-user tool. There is no authentication,
+              authorisation, or conflict resolution for concurrent edits. Running the server on a local
+              network and opening it from a second machine is technically possible but unsupported —
+              you may see stale data if two browsers edit the same adventure simultaneously.
+            </P>
+          </FaqItem>
+
+          <FaqItem question="Where is my data stored?">
+            <P>
+              In the desktop app, your SQLite database and uploaded files are stored in your OS
+              user-data directory (<code>AppData/Roaming</code> on Windows, <code>~/Library/Application Support</code>{' '}
+              on macOS, <code>~/.config</code> on Linux). In dev/server mode the database defaults to the
+              repo root and uploads go into an <code>uploads/</code> folder next to the server process.
+            </P>
+          </FaqItem>
+
+          <FaqItem question="How do I back up my campaigns?">
+            <P>
+              Use <strong>↓ Export Adventure</strong> on the home screen. This produces a{' '}
+              <code>.gma.zip</code> archive that includes all scenes, encounters, players, playlists,
+              and uploaded audio files. You can reimport it on any instance of GM Assistant using{' '}
+              <strong>↑ Import Adventure</strong>.
+            </P>
+          </FaqItem>
+
+          <FaqItem question="How do I set up the two-screen display?">
+            <P>
+              Click <strong>🖥 Player Window → Open Player Screen</strong> from any GM page. A new
+              browser window opens at <code>/player</code>. Drag it to your players' monitor and
+              maximise or fullscreen it. Everything you push from the GM side — images, initiative
+              tracker, HP changes — appears there instantly with no page reload required.
+            </P>
+          </FaqItem>
+
+          <FaqItem question="Can I import monsters from other sources?">
+            <P>
+              The built-in search covers the <A href="https://open5e.com/">Open5e</A> database, which
+              includes the SRD 5.1 monsters and a large collection of third-party content. For monsters
+              not in Open5e you can paste a raw JSON stat block directly into the stat block field when
+              creating or editing a combatant.
+            </P>
+          </FaqItem>
+
+          <FaqItem question="What audio formats are supported?">
+            <P>
+              Uploaded files: MP3, M4A, AAC, OGG, FLAC, WAV, Opus, WebM, MP4, WMA, AIFF. YouTube
+              links are also supported and stream directly in the browser. Uploaded audio works
+              fully offline in the desktop build; YouTube requires an internet connection.
+            </P>
+          </FaqItem>
+          <FaqItem question="Does this work on tablets or phones?">
+            <P>
+              Not currently, no.  The web server version may be accessible on a tablet or phone, but the UI is not optimized for it, and some features, like YouTube audio playback, may not work at all.
+              There is no installable mobile app.
+            </P>
+          </FaqItem>
+          <FaqItem question="Do you take bug reports or feature requests?">
+            <P>
+              I built this tool for my own use, but you can open an issue on <A href="https://github.com/greenmatter/gm-assistant">GitHub</A>.
+            </P>
+          </FaqItem>
         </Section>
 
       </main>
@@ -299,6 +388,31 @@ const s: Record<string, React.CSSProperties> = {
     textDecorationColor: '#c9a84c55',
     textUnderlineOffset: '3px',
     cursor: 'pointer',
+  },
+
+  // FaqItem — details/summary accordion
+  faqDetails: {
+    marginBottom: 8,
+    background: '#16213e',
+    border: '1px solid #2a2a4a',
+    borderRadius: 6,
+    overflow: 'hidden',
+  },
+  faqSummary: {
+    padding: '12px 16px',
+    fontSize: '0.925rem',
+    fontWeight: 600,
+    color: '#c9a84c',
+    cursor: 'pointer',
+    listStyle: 'none',
+    display: 'flex',
+    alignItems: 'center',
+    gap: 10,
+    userSelect: 'none' as const,
+  },
+  faqBody: {
+    padding: '0 16px 14px',
+    borderTop: '1px solid #2a2a4a',
   },
 
   // Figure / image

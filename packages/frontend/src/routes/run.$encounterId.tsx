@@ -1582,7 +1582,7 @@ const s: Record<string, React.CSSProperties> = {
   },
   activeName: {
     fontSize: '0.9rem', color: '#c9a84c', fontWeight: 600,
-    width: 180, textAlign: 'center' as const,
+    width: 120, textAlign: 'center' as const,
     overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' as const,
     flexShrink: 0,
   },
