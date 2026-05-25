@@ -275,7 +275,7 @@ function AdventureDetailPage() {
             download
             style={s.btnSecondary as React.CSSProperties}
             title="Export adventure as .gma.zip"
-          >↓ Export</a>
+          >↓ Export Adventure</a>
         }
         playerMenuItems={
           <>
@@ -421,7 +421,7 @@ function AdventureDetailPage() {
           count={data.encounters.length}
           addLabel="+ Add Encounter"
           headerActions={
-            <button style={s.btnSecondary} onClick={() => setShowImportEncounter(true)}>↑ Import</button>
+            <button style={s.btnSecondary} onClick={() => setShowImportEncounter(true)}>↑ Import Encounter</button>
           }
           addForm={(close) => (
             <EncounterForm
@@ -808,7 +808,7 @@ function EncounterCard({
             download
             style={{ ...s.btnSecondarySmall, textDecoration: 'none' } as React.CSSProperties}
             title="Export encounter"
-          >↓</a>
+          >↓ Export Encounter</a>
           <button style={s.btnSecondarySmall} onClick={() => setExpanded((v) => !v)}>
             {expanded ? 'Close' : 'Manage'}
           </button>
