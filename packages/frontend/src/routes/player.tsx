@@ -205,7 +205,7 @@ function CombatantCard({ combatant: c, rank, showHp, showInitiative, isActive }:
 
             {/* HP row */}
             {isGroup ? (
-              isActive && (
+              c.membersExpanded && (
                 <div style={{ ...s.memberGrid, gridTemplateRows: `repeat(${Math.min(c.members!.length, 6)}, auto)` }}>
                   {c.members!.map((m) => {
                     const mDead = m.currentHp === 0;

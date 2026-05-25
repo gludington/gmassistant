@@ -251,8 +251,8 @@ function HelpPage() {
           <H2>Adventure Manager</H2>
           <P>
             The adventure manager is the hub for everything in a campaign. It is
-            divided into four collapsible panels: <strong>Players</strong>,{" "}
-            <strong>Image Scenes</strong>, <strong>Encounters</strong>, and{" "}
+            divided into four collapsible panels: <strong>Players</strong>,
+            <strong>Image Scenes</strong>, <strong>Encounters</strong>, and
             <strong>Playlists</strong>.
           </P>
 
@@ -285,14 +285,14 @@ function HelpPage() {
 
           <H3>Image Scenes</H3>
           <P>
-            Scenes group atmospheric artwork by location or mood. Clicking{" "}
+            Scenes group atmospheric artwork by location or mood. Clicking
             <strong>▶ Show</strong> on an image pushes it to the Player Screen
             instantly. You can attach a playlist to an image so that it starts
             automatically when the image is shown.
           </P>
           <Ul>
             <Li>
-              Click <strong>+ Add Scene</strong> to create a named scene (e.g.{" "}
+              Click <strong>+ Add Scene</strong> to create a named scene (e.g.
               <em>Tavern Interior</em>, <em>Boss Chamber</em>).
             </Li>
             <Li>
@@ -319,8 +319,8 @@ function HelpPage() {
             </Li>
           </Ul>
           <Tip>
-            <strong>Cover</strong> fills the entire screen (may crop edges).{" "}
-            <strong>Fit</strong> shows the full image with letterboxing.{" "}
+            <strong>Cover</strong> fills the entire screen (may crop edges).
+            <strong>Fit</strong> shows the full image with letterboxing.
             <strong>Center</strong> displays the image at its natural
             resolution, centred.
           </Tip>
@@ -357,7 +357,10 @@ function HelpPage() {
                 </Li>
                 <Li>
                   <strong>Group</strong> — multiple monsters sharing a
-                  initiative count (e.g. <em>3× Goblin</em>).
+                  initiative count (e.g. <em>3× Goblin</em>).  The group can be
+                  expanded on the player screen to show each member's HP and conditions.
+                  It is otherwise automatically expanded during that group's turn.  Clicking
+                  on the name of a member in the group will allow you to rename it.
                 </Li>
                 <Li>
                   <strong>Event / Lair Action</strong> — non-creature entries
@@ -372,7 +375,7 @@ function HelpPage() {
             </Li>
             <Li>
               Click <strong>Open5e Search</strong> on any enemy or NPC to import
-              its stat block directly from the{" "}
+              its stat block directly from the
               <A href="https://open5e.com/">Open5e</A> monster database.
             </Li>
             <Li>
@@ -501,7 +504,7 @@ function HelpPage() {
           </Ul>
 
           <Tip>
-            You can add combatants mid-encounter using the{" "}
+            You can add combatants mid-encounter using the
             <strong>+ Add Combatant</strong> button. Temporary combatants exist
             only for the current run and are not saved back to the roster.
           </Tip>
@@ -646,7 +649,7 @@ function HelpPage() {
               Click <strong>🖥 Player Window</strong> in the GM header.
             </OlLi>
             <OlLi>
-              Select <strong>Open Player Screen</strong>. A new window opens at{" "}
+              Select <strong>Open Player Screen</strong>. A new window opens at
               <code>/player</code>.
             </OlLi>
             <OlLi>
@@ -658,11 +661,11 @@ function HelpPage() {
           <H3>What Players See</H3>
           <Ul>
             <Li>
-              <strong>Images</strong> — displayed when you click{" "}
+              <strong>Images</strong> — displayed when you click
               <strong>▶ Show</strong> on a scene image in the adventure manager.
             </Li>
             <Li>
-              <strong>Initiative tracker</strong> — shown when you click{" "}
+              <strong>Initiative tracker</strong> — shown when you click
               <strong>Show on Player</strong> from the encounter tracker. It
               overlays the bottom of the screen over whatever image is currently
               displayed.
@@ -711,7 +714,7 @@ function HelpPage() {
           <P>Everything works offline except:</P>
           <Ol>
             <OlLi>
-              Stat block import from <A href="https://open5e.com/">Open5e</A>{" "}
+              Stat block import from <A href="https://open5e.com/">Open5e</A>
               (requires internet to query the API).
             </OlLi>
             <OlLi>
@@ -737,7 +740,7 @@ function HelpPage() {
         <Section id="import">
           <H2>Import &amp; Export</H2>
           <P>
-            Adventures and encounters can be packaged into <code>.gma.zip</code>{" "}
+            Adventures and encounters can be packaged into <code>.gma.zip</code>
             files for backup, migration, or sharing with other GMs.
           </P>
 
@@ -749,7 +752,7 @@ function HelpPage() {
               encounters, playlists, and uploaded audio).
             </Li>
             <Li>
-              From inside an adventure, click{" "}
+              From inside an adventure, click
               <strong>↓ Export Encounter</strong> to export a single encounter,
               including its combatant roster and stat blocks.
             </Li>
@@ -762,7 +765,7 @@ function HelpPage() {
               restore an exported adventure archive.
             </Li>
             <Li>
-              From inside an adventure, click{" "}
+              From inside an adventure, click
               <strong>↑ Import Encounter</strong> to add a previously exported
               encounter to the current adventure.
             </Li>

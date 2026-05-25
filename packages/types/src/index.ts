@@ -81,6 +81,7 @@ export interface LiveCombatant {
   type: CombatantType;
   color: string | null;
   conditions: string[];
+  membersExpanded?: boolean;
   members?: { id: number; label: string; currentHp: number; maxHp: number; conditions?: string[] }[];
 }
 

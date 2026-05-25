@@ -55,6 +55,7 @@ interface RunCombatant extends LiveCombatant {
   legendaryActionsRemaining?: number;
   legendaryResistancesMax?: number;
   legendaryResistancesRemaining?: number;
+  autoExpanded?: boolean;
   members?: { id: number; label: string; currentHp: number; maxHp: number; conditions: string[] }[];
 }
 
@@ -423,12 +424,22 @@ function EncounterRunner() {
     const newRound = Math.max(1, round + roundDelta);
     if (roundDelta !== 0) setRound(newRound);
     const nextId = sorted[nextIdx].id;
+    const prevId = currentIdx !== -1 ? sorted[currentIdx].id : null;
     setActiveCombatantId(nextId);
-    const nextCombatants = combatants.map((c) =>
-      c.id === nextId && c.legendaryActionsMax != null
-        ? { ...c, legendaryActionsRemaining: c.legendaryActionsMax }
-        : c
-    );
+    const nextCombatants = combatants.map((c) => {
+      if (prevId !== null && c.id === prevId && c.type === 'group' && c.autoExpanded) {
+        return { ...c, membersExpanded: false, autoExpanded: false };
+      }
+      if (c.id === nextId) {
+        const withLegendary = c.legendaryActionsMax != null ? { ...c, legendaryActionsRemaining: c.legendaryActionsMax } : c;
+        if (c.type === 'group') {
+          const wasAlreadyOpen = c.membersExpanded;
+          return { ...withLegendary, membersExpanded: true, autoExpanded: !wasAlreadyOpen };
+        }
+        return withLegendary;
+      }
+      return c;
+    });
     if (nextCombatants !== combatants) setCombatants(nextCombatants);
     broadcast(nextCombatants, showOnPlayer, showHp, showInitiative, nextId, newRound);
   }
@@ -436,7 +447,18 @@ function EncounterRunner() {
   function activateCombatant(id: number) {
     const nextId = activeCombatantId === id ? null : id;
     setActiveCombatantId(nextId);
-    broadcast(combatants, showOnPlayer, showHp, showInitiative, nextId);
+    const nextCombatants = combatants.map((c) => {
+      if (c.id === activeCombatantId && c.type === 'group' && c.autoExpanded) {
+        return { ...c, membersExpanded: false, autoExpanded: false };
+      }
+      if (nextId !== null && c.id === nextId && c.type === 'group') {
+        const wasAlreadyOpen = c.membersExpanded;
+        return { ...c, membersExpanded: true, autoExpanded: !wasAlreadyOpen };
+      }
+      return c;
+    });
+    if (nextCombatants !== combatants) setCombatants(nextCombatants);
+    broadcast(nextCombatants, showOnPlayer, showHp, showInitiative, nextId);
   }
 
   // Used by CombatantRow for inline HP/init edits.
@@ -804,12 +826,19 @@ function CombatantRow({
       {/* Name + type */}
       <div style={s.nameCell}>
         <button
-          style={{ ...s.editBtn, color: isActive ? '#c9a84c' : '#444', fontSize: '0.9rem' }}
+          style={{ ...s.editBtn, color: isActive ? '#c9a84c' : '#444', fontSize: '1rem' }}
           onClick={onSetActive}
           title={isActive ? 'Active combatant (click to deactivate)' : 'Set as active combatant'}
-        >▶</button>
+        >{isActive ? '●' : '○'}</button>
         <span style={dead ? s.deadName : s.name}>{c.name}</span>
         <span style={{ ...s.typeBadge, ...typeStyle(c.type) }}>{c.type === 'lair' ? 'lair action' : c.type}</span>
+        {isGroup && c.members && c.members.length > 0 && (
+          <button
+            style={{ ...s.editBtn, fontSize: '1.25rem', color: c.membersExpanded ? '#c9a84c' : '#666' }}
+            onClick={() => onUpdate({ membersExpanded: !c.membersExpanded })}
+            title={c.membersExpanded ? 'Hide members on player screen' : 'Show members on player screen'}
+          >{c.membersExpanded ? '▾' : '▸'}</button>
+        )}
         {c.isAdventurePlayer && (
           <>
             {c.armorClass != null && <span style={s.pcStat} title="Armor Class">AC {c.armorClass}</span>}
@@ -886,7 +915,14 @@ function CombatantRow({
               return (
                 <div key={m.id} style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
                   <div style={{ ...s.memberRow, opacity: mDead ? 0.5 : 1 }}>
-                    <span style={s.memberLabel}>{m.label}</span>
+                    <MemberLabelDisplay
+                      memberId={m.id}
+                      label={m.label}
+                      onRename={(newLabel) => {
+                        if (!c.members) return;
+                        onUpdate({ members: c.members.map((x) => x.id === m.id ? { ...x, label: newLabel } : x) });
+                      }}
+                    />
                     {m.conditions.map((cond) => (
                       <span key={cond} style={s.condBadge} title={cond} onClick={() => {
                         const base = cond.replace(/\s+\d+$/, '');
@@ -1083,6 +1119,48 @@ function MemberHpDisplay({ member, onSet }: { member: { currentHp: number; maxHp
   return (
     <span style={{ ...s.hpText, fontSize: '0.8rem', minWidth: 48, cursor: 'pointer' }} onClick={() => setEditing(true)} title="Click to edit">
       {member.currentHp}<span style={s.hpMax}>/{member.maxHp}</span>
+    </span>
+  );
+}
+
+// Small inline label display for group members with click-to-edit + persist
+function MemberLabelDisplay({ memberId, label, onRename }: { memberId: number; label: string; onRename: (label: string) => void }) {
+  const [editing, setEditing] = useState(false);
+  const [draft, setDraft] = useState(label);
+
+  async function save() {
+    const trimmed = draft.trim();
+    if (trimmed && trimmed !== label) {
+      await fetch(`/api/encounters/combatants/group-members/${memberId}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ label: trimmed }),
+      });
+      onRename(trimmed);
+    } else {
+      setDraft(label);
+    }
+    setEditing(false);
+  }
+
+  if (editing) {
+    return (
+      <input
+        style={{ ...s.hpInput, width: 80, fontSize: '0.75rem' }}
+        autoFocus
+        value={draft}
+        onChange={(e) => setDraft(e.target.value)}
+        onBlur={save}
+        onKeyDown={(e) => {
+          if (e.key === 'Enter') (e.target as HTMLInputElement).blur();
+          if (e.key === 'Escape') { setDraft(label); setEditing(false); }
+        }}
+      />
+    );
+  }
+  return (
+    <span style={{ ...s.memberLabel, cursor: 'pointer' }} onClick={() => { setDraft(label); setEditing(true); }} title="Click to rename">
+      {label}
     </span>
   );
 }

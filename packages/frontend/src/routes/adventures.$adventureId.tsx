@@ -1016,7 +1016,8 @@ function CombatantManager({ encounter, onInvalidate }: { encounter: Encounter; o
               <div style={{ paddingLeft: 18, display: 'flex', flexWrap: 'wrap', gap: 4, marginTop: 2 }}>
                 {c.members.map((m) => (
                   <span key={m.id} style={s.memberChip}>
-                    {m.label} <span style={{ opacity: 0.7 }}>HP {m.maxHp}</span>
+                    <MemberLabelChip memberId={m.id} label={m.label} onSaved={onInvalidate} />
+                    <span style={{ opacity: 0.7 }}> HP {m.maxHp}</span>
                   </span>
                 ))}
               </div>
@@ -1037,6 +1038,51 @@ function CombatantManager({ encounter, onInvalidate }: { encounter: Encounter; o
         </button>
       )}
     </div>
+  );
+}
+
+// ── MemberLabelChip ───────────────────────────────────────────────────────────
+
+function MemberLabelChip({ memberId, label, onSaved }: { memberId: number; label: string; onSaved: () => void }) {
+  const [editing, setEditing] = useState(false);
+  const [draft, setDraft] = useState(label);
+
+  async function save() {
+    const trimmed = draft.trim();
+    if (trimmed && trimmed !== label) {
+      await fetch(`/api/encounters/combatants/group-members/${memberId}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ label: trimmed }),
+      });
+      onSaved();
+    } else {
+      setDraft(label);
+    }
+    setEditing(false);
+  }
+
+  if (editing) {
+    return (
+      <input
+        style={{ fontSize: '0.75rem', background: '#1a1a2e', border: '1px solid #444', color: '#ddd', borderRadius: 3, padding: '1px 4px', width: 100 }}
+        autoFocus
+        value={draft}
+        onChange={(e) => setDraft(e.target.value)}
+        onBlur={save}
+        onKeyDown={(e) => {
+          if (e.key === 'Enter') (e.target as HTMLInputElement).blur();
+          if (e.key === 'Escape') { setDraft(label); setEditing(false); }
+        }}
+      />
+    );
+  }
+  return (
+    <span
+      style={{ cursor: 'pointer' }}
+      onClick={() => { setDraft(label); setEditing(true); }}
+      title="Click to rename"
+    >{label}</span>
   );
 }
 
