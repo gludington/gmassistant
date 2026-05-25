@@ -1,4 +1,5 @@
 import { useState, useRef, useEffect } from 'react';
+import { DeleteConfirmModal } from './DeleteConfirmModal';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useAudio, type Playlist, type PlaylistTrack } from '../hooks/useAudio';
 
@@ -19,6 +20,7 @@ export function PlaylistDrawer({
   const [addingTrackId, setAddingTrackId] = useState<number | null>(null);
   const [newName, setNewName] = useState('');
   const [showNewForm, setShowNewForm] = useState(false);
+  const [deleteTarget, setDeleteTarget] = useState<Playlist | null>(null);
 
   const { data: playlists = [] } = useQuery<Playlist[]>({
     queryKey: ['playlists-drawer', adventureId],
@@ -56,6 +58,17 @@ export function PlaylistDrawer({
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ playMode }),
+      });
+    },
+    onSuccess: invalidate,
+  });
+
+  const setLoop = useMutation({
+    mutationFn: async ({ id, loop }: { id: number; loop: boolean }) => {
+      await fetch(`/api/playlists/${id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ loop }),
       });
     },
     onSuccess: invalidate,
@@ -138,8 +151,13 @@ export function PlaylistDrawer({
                   <button
                     style={{ ...s.modeBtn, color: pl.playMode === 'shuffle' ? '#c9a84c' : '#888' }}
                     onClick={() => setPlayMode.mutate({ id: pl.id, playMode: pl.playMode === 'shuffle' ? 'sequential' : 'shuffle' })}
-                    title={pl.playMode === 'shuffle' ? 'Shuffle (click for sequential)' : 'Sequential (click for shuffle)'}
+                    title={pl.playMode === 'shuffle' ? 'Shuffle on (click to turn off)' : 'Shuffle off (click to turn on)'}
                   >{pl.playMode === 'shuffle' ? '🔀' : '↕'}</button>
+                  <button
+                    style={{ ...s.modeBtn, color: pl.loop ? '#c9a84c' : '#888' }}
+                    onClick={() => setLoop.mutate({ id: pl.id, loop: !pl.loop })}
+                    title={pl.loop ? 'Loop on (click to turn off)' : 'Loop off (click to turn on)'}
+                  >{pl.loop ? '🔁' : '↺'}</button>
                   {pl.tracks.length > 0 && (
                     <button
                       style={{ ...s.iconBtn, color: isPlaying ? '#c9a84c' : '#aaa' }}
@@ -160,9 +178,9 @@ export function PlaylistDrawer({
                   >↓</a>
                   <button
                     style={{ ...s.iconBtn, color: '#e05252' }}
-                    onClick={() => { if (confirm(`Delete "${pl.name}"?`)) deletePlaylist.mutate(pl.id); }}
+                    onClick={() => setDeleteTarget(pl)}
                     title="Delete playlist"
-                  >✕</button>
+                  >🗑</button>
                 </div>
               </div>
 
@@ -191,6 +209,17 @@ export function PlaylistDrawer({
           );
         })}
       </div>
+
+      {deleteTarget && (
+        <DeleteConfirmModal
+          title="Delete Playlist"
+          name={deleteTarget.name}
+          description="All tracks in this playlist will also be deleted. This cannot be undone."
+          isPending={deletePlaylist.isPending}
+          onConfirm={() => deletePlaylist.mutate(deleteTarget.id, { onSuccess: () => setDeleteTarget(null) })}
+          onCancel={() => setDeleteTarget(null)}
+        />
+      )}
     </div>
   );
 }
@@ -264,7 +293,7 @@ function TrackList({ tracks, onDelete, onReorder }: {
             {track.type === 'youtube' ? '▶' : '🎵'}
           </span>
           <span style={s.trackName}>{track.name}</span>
-          <button style={{ ...s.iconBtn, color: '#444', fontSize: '0.7rem' }} onClick={() => onDelete(track.id)}>✕</button>
+          <button style={{ ...s.iconBtn, color: '#ef5350' }} onClick={() => onDelete(track.id)} title="Delete track">🗑</button>
         </div>
       ))}
     </div>

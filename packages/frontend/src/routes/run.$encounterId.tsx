@@ -290,7 +290,7 @@ function EncounterRunner() {
       if (!isResume && encounter.playlistId) {
         fetch(`/api/playlists?adventureId=${encounter.adventureId}`)
           .then((r) => r.json())
-          .then((pls: { id: number; name: string; sortOrder: number; adventureId: number; playMode: 'sequential' | 'shuffle'; tracks: { id: number; playlistId: number; name: string; type: 'file' | 'youtube'; url: string; sortOrder: number }[] }[]) => {
+          .then((pls: { id: number; name: string; sortOrder: number; adventureId: number; playMode: 'sequential' | 'shuffle'; loop: boolean; tracks: { id: number; playlistId: number; name: string; type: 'file' | 'youtube'; url: string; sortOrder: number }[] }[]) => {
             const pl = pls.find((p) => p.id === encounter.playlistId);
             if (pl && pl.tracks.length > 0) playPlaylist(pl);
           })
@@ -1582,7 +1582,7 @@ const s: Record<string, React.CSSProperties> = {
   },
   activeName: {
     fontSize: '0.9rem', color: '#c9a84c', fontWeight: 600,
-    width: 180, textAlign: 'center' as const,
+    width: 120, textAlign: 'center' as const,
     overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' as const,
     flexShrink: 0,
   },

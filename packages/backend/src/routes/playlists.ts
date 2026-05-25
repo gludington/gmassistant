@@ -54,11 +54,11 @@ router.put('/:id', zValidator('json', z.object({ name: z.string().min(1) })), as
   return c.json(updated);
 });
 
-router.patch('/:id', zValidator('json', z.object({ playMode: z.enum(['sequential', 'shuffle']) })), async (c) => {
+router.patch('/:id', zValidator('json', z.object({ playMode: z.enum(['sequential', 'shuffle']).optional(), loop: z.boolean().optional() })), async (c) => {
   const db = c.var.db;
   const id = Number(c.req.param('id'));
-  const { playMode } = c.req.valid('json');
-  const [updated] = await db.update(playlists).set({ playMode }).where(eq(playlists.id, id)).returning();
+  const body = c.req.valid('json');
+  const [updated] = await db.update(playlists).set({ ...body }).where(eq(playlists.id, id)).returning();
   if (!updated) return c.json({ error: 'Not found' }, 404);
   return c.json(updated);
 });

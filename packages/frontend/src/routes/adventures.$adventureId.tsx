@@ -9,6 +9,7 @@ import { GmHeader, dropdownItem, dropdownItemActive } from '../components/GmHead
 import { StatBlockEditor } from '../components/StatBlockEditor';
 import { ImportModal } from '../components/ImportModal';
 import { useAudio, type Playlist, type PlaylistTrack } from '../hooks/useAudio';
+import { DeleteConfirmModal } from '../components/DeleteConfirmModal';
 
 // ── Types ────────────────────────────────────────────────────────────────────
 
@@ -169,8 +170,12 @@ function AdventureDetailPage() {
   const deleteEncounter = useMutation({
     mutationFn: async (id: number) => {
       await fetch(`/api/encounters/${id}`, { method: 'DELETE' });
+      return id;
     },
-    onSuccess: invalidate,
+    onSuccess: (id) => {
+      localStorage.removeItem(`gma:run:${id}`);
+      invalidate();
+    },
   });
 
   const addScene = useMutation({
@@ -224,6 +229,8 @@ function AdventureDetailPage() {
   const [showImportEncounter, setShowImportEncounter] = useState(false);
   const [adventureNameDraft, setAdventureNameDraft] = useState('');
   const [adventureDescDraft, setAdventureDescDraft] = useState('');
+  const [deleteSceneTarget, setDeleteSceneTarget] = useState<ImageScene | null>(null);
+  const [deleteEncounterTarget, setDeleteEncounterTarget] = useState<Encounter | null>(null);
 
   const updateAdventure = useMutation({
     mutationFn: async (body: { name: string; description: string }) => {
@@ -359,14 +366,11 @@ function AdventureDetailPage() {
               <div key={p.id} style={s.combatantRow}>
                 {p.color && <span style={{ ...s.colorDot, background: p.color }} />}
                 <span style={s.combatantName}>{p.name}</span>
-                <span style={s.combatantStat}>HP {p.maxHp}</span>
-                <span style={s.combatantStat}>Init {p.initiativeModifier >= 0 ? `+${p.initiativeModifier}` : p.initiativeModifier}</span>
-                {p.armorClass != null && <span style={s.combatantStat}>AC {p.armorClass}</span>}
-                {p.spellDc != null && <span style={s.combatantStat}>DC {p.spellDc}</span>}
-                {p.passivePerception != null && <span style={s.combatantStat}>PP {p.passivePerception}</span>}
-                <span style={{ ...s.typeBadge, ...typeStyle('pc') }}>pc</span>
+                {p.armorClass != null && <span style={s.playerStat}>AC {p.armorClass}</span>}
+                {p.spellDc != null && <span style={s.playerStat}>DC {p.spellDc}</span>}
+                {p.passivePerception != null && <span style={s.playerStat}>PP {p.passivePerception}</span>}
                 <button style={s.btnIcon} onClick={() => setEditingPlayerId(p.id)} title="Edit">✎</button>
-                <button style={s.btnIcon} onClick={() => deletePlayer.mutate(p.id)}>✕</button>
+                <button style={{ ...s.btnIcon, color: '#ef5350' }} onClick={() => deletePlayer.mutate(p.id)} title="Delete">🗑</button>
               </div>
             )
           ))}
@@ -401,7 +405,7 @@ function AdventureDetailPage() {
               scene={scene}
               playlists={data.playlists}
               onRename={(name) => renameScene.mutate({ id: scene.id, name })}
-              onDelete={() => deleteScene.mutate(scene.id)}
+              onDelete={() => setDeleteSceneTarget(scene)}
               onInvalidate={invalidate}
               onSend={(filePath, fit) => {
                 send({ type: 'SHOW_IMAGE', payload: { filePath, fit } });
@@ -439,12 +443,34 @@ function AdventureDetailPage() {
               key={e.id}
               encounter={e}
               playlists={data.playlists}
-              onDelete={() => deleteEncounter.mutate(e.id)}
+              onDelete={() => setDeleteEncounterTarget(e)}
               onInvalidate={invalidate}
             />
           ))}
         </Section>
       </main>
+
+      {deleteSceneTarget && (
+        <DeleteConfirmModal
+          title="Delete Scene"
+          name={deleteSceneTarget.name}
+          description="All images in this scene will also be deleted. This cannot be undone."
+          isPending={deleteScene.isPending}
+          onConfirm={() => deleteScene.mutate(deleteSceneTarget.id, { onSuccess: () => setDeleteSceneTarget(null) })}
+          onCancel={() => setDeleteSceneTarget(null)}
+        />
+      )}
+
+      {deleteEncounterTarget && (
+        <DeleteConfirmModal
+          title="Delete Encounter"
+          name={deleteEncounterTarget.name}
+          description="All combatants and encounter history will be deleted. This cannot be undone."
+          isPending={deleteEncounter.isPending}
+          onConfirm={() => deleteEncounter.mutate(deleteEncounterTarget.id, { onSuccess: () => setDeleteEncounterTarget(null) })}
+          onCancel={() => setDeleteEncounterTarget(null)}
+        />
+      )}
     </div>
   );
 }
@@ -623,10 +649,7 @@ function SceneCard({
               <button style={s.btnGhost} type="button" onClick={() => setEditingName(false)}>✕</button>
             </form>
           ) : (
-            <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-              <strong style={s.cardTitle}>{scene.name}</strong>
-              <button style={s.btnIcon} onClick={() => { setNameDraft(scene.name); setEditingName(true); }} title="Rename scene">✎</button>
-            </div>
+            <strong style={s.cardTitle}>{scene.name}</strong>
           )}
         </div>
         <div style={s.cardRight}>
@@ -634,7 +657,8 @@ function SceneCard({
           <button style={s.btnSecondarySmall} onClick={() => setExpanded((v) => !v)}>
             {expanded ? 'Close' : 'Manage'}
           </button>
-          <button style={{ ...s.btnIcon, color: '#ef5350' }} onClick={onDelete} title="Delete scene">✕</button>
+          <button style={s.btnIcon} onClick={() => { setNameDraft(scene.name); setEditingName(true); }} title="Rename scene">✎</button>
+          <button style={{ ...s.btnIcon, color: '#ef5350' }} onClick={onDelete} title="Delete scene">🗑</button>
         </div>
       </div>
 
@@ -696,7 +720,7 @@ function SceneCard({
                         style={{ ...s.tileIconBtn, color: '#e05c5c' }}
                         onClick={() => removeImage.mutate(img.id)}
                         title="Remove"
-                      >✕</button>
+                      >🗑</button>
                     </div>
                   </div>
                 </div>
@@ -744,9 +768,30 @@ function EncounterCard({
   onInvalidate: () => void;
 }) {
   const [expanded, setExpanded] = useState(false);
+  const [editing, setEditing] = useState(false);
+  const [editName, setEditName] = useState('');
+  const [editDesc, setEditDesc] = useState('');
   const [isActive, setIsActive] = useState(() => !!localStorage.getItem(`gma:run:${encounter.id}`));
   const { playPlaylist } = useAudio();
   const send = useBroadcastSender();
+
+  const updateEncounter = useMutation({
+    mutationFn: async (body: { name: string; description: string }) => {
+      const res = await fetch(`/api/encounters/${encounter.id}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body),
+      });
+      if (!res.ok) throw new Error('Failed to update encounter');
+    },
+    onSuccess: () => { onInvalidate(); setEditing(false); },
+  });
+
+  function startEditing() {
+    setEditName(encounter.name);
+    setEditDesc(encounter.description ?? '');
+    setEditing(true);
+  }
 
   const setEncounterPlaylist = useMutation({
     mutationFn: async (playlistId: number | null) => {
@@ -776,29 +821,57 @@ function EncounterCard({
     <div style={{ ...s.sceneWrapper, ...(isActive ? { borderLeft: '3px solid #4caf50', paddingLeft: 8 } : {}) }}>
       <div style={s.card}>
         <div style={s.cardBody}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-            <strong style={s.cardTitle}>{encounter.name}</strong>
-            {isActive && (
-              <span style={{ fontSize: '0.7rem', color: '#4caf50', border: '1px solid #3d6a3d', borderRadius: 10, padding: '1px 7px', fontWeight: 600, letterSpacing: '0.03em' }}>
-                ● Active
-              </span>
-            )}
-          </div>
-          {encounter.description && <p style={s.cardDesc}>{encounter.description}</p>}
-          <div style={{ marginTop: 4, display: 'flex', alignItems: 'center', gap: 6 }}>
-            <span style={{ fontSize: '0.72rem', color: '#666' }}>🎵</span>
-            <select
-              style={{ ...s.input, fontSize: '0.75rem', padding: '2px 6px', color: '#888' }}
-              value={encounter.playlistId ?? ''}
-              onChange={(e) => setEncounterPlaylist.mutate(e.target.value ? Number(e.target.value) : null)}
+          {editing ? (
+            <form
+              style={{ display: 'flex', flexDirection: 'column', gap: 6 }}
+              onSubmit={(e) => { e.preventDefault(); if (editName.trim()) updateEncounter.mutate({ name: editName.trim(), description: editDesc.trim() }); }}
             >
-              <option value="">No playlist</option>
-              {playlists.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
-            </select>
-            {activePlaylist && activePlaylist.tracks.length > 0 && (
-              <button style={{ ...s.btnIcon, color: '#c9a84c' }} title="Play playlist now" onClick={() => playPlaylist(activePlaylist)}>▶</button>
-            )}
-          </div>
+              <input
+                style={{ ...s.editInput, fontSize: '0.875rem' }}
+                value={editName}
+                autoFocus
+                onChange={(e) => setEditName(e.target.value)}
+                onKeyDown={(e) => { if (e.key === 'Escape') setEditing(false); }}
+                placeholder="Encounter name"
+              />
+              <textarea
+                style={{ ...s.editInput, fontSize: '0.825rem', resize: 'vertical', minHeight: 52 }}
+                value={editDesc}
+                onChange={(e) => setEditDesc(e.target.value)}
+                placeholder="Description (optional)"
+              />
+              <div style={{ display: 'flex', gap: 6 }}>
+                <button style={s.btnSecondarySmall} type="submit" disabled={!editName.trim() || updateEncounter.isPending}>Save</button>
+                <button style={s.btnGhost} type="button" onClick={() => setEditing(false)}>✕</button>
+              </div>
+            </form>
+          ) : (
+            <>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                <strong style={s.cardTitle}>{encounter.name}</strong>
+                {isActive && (
+                  <span style={{ fontSize: '0.7rem', color: '#4caf50', border: '1px solid #3d6a3d', borderRadius: 10, padding: '1px 7px', fontWeight: 600, letterSpacing: '0.03em' }}>
+                    ● Active
+                  </span>
+                )}
+              </div>
+              {encounter.description && <p style={s.cardDesc}>{encounter.description}</p>}
+              <div style={{ marginTop: 4, display: 'flex', alignItems: 'center', gap: 6 }}>
+                <span style={{ fontSize: '0.72rem', color: '#666' }}>🎵</span>
+                <select
+                  style={{ ...s.input, fontSize: '0.75rem', padding: '2px 6px', color: '#888' }}
+                  value={encounter.playlistId ?? ''}
+                  onChange={(e) => setEncounterPlaylist.mutate(e.target.value ? Number(e.target.value) : null)}
+                >
+                  <option value="">No playlist</option>
+                  {playlists.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
+                </select>
+                {activePlaylist && activePlaylist.tracks.length > 0 && (
+                  <button style={{ ...s.btnIcon, color: '#c9a84c' }} title="Play playlist now" onClick={() => playPlaylist(activePlaylist)}>▶</button>
+                )}
+              </div>
+            </>
+          )}
         </div>
         <div style={s.cardRight}>
           <span style={s.badge}>{encounter.combatants.length} combatants</span>
@@ -823,7 +896,8 @@ function EncounterCard({
           <button style={s.btnSecondarySmall} onClick={() => setExpanded((v) => !v)}>
             {expanded ? 'Close' : 'Manage'}
           </button>
-          <button style={s.btnIcon} onClick={onDelete}>✕</button>
+          <button style={s.btnIcon} onClick={startEditing} title="Edit encounter">✎</button>
+          <button style={{ ...s.btnIcon, color: '#ef5350' }} onClick={onDelete} title="Delete encounter">🗑</button>
         </div>
       </div>
       {expanded && (
@@ -936,7 +1010,7 @@ function CombatantManager({ encounter, onInvalidate }: { encounter: Encounter; o
                 >+</button>
               )}
               <button style={s.btnIcon} onClick={() => setEditingId(c.id)} title="Edit">✎</button>
-              <button style={s.btnIcon} onClick={() => removeCombatant.mutate(c.id)}>✕</button>
+              <button style={{ ...s.btnIcon, color: '#ef5350' }} onClick={() => removeCombatant.mutate(c.id)} title="Remove combatant">🗑</button>
             </div>
             {c.type === 'group' && c.members && c.members.length > 0 && (
               <div style={{ paddingLeft: 18, display: 'flex', flexWrap: 'wrap', gap: 4, marginTop: 2 }}>
@@ -1117,7 +1191,7 @@ function CombatantForm({
                   onChange={(e) => updateMember(i, 'maxHp', Number(e.target.value))}
                 />
               </label>
-              <button type="button" style={s.btnIcon} onClick={() => removeMember(i)}>✕</button>
+              <button type="button" style={{ ...s.btnIcon, color: '#ef5350' }} onClick={() => removeMember(i)} title="Remove member">🗑</button>
             </div>
           ))}
           {members.length === 0 && <p style={{ ...s.muted, fontSize: '0.75rem' }}>Add at least one member.</p>}
@@ -1429,6 +1503,7 @@ const s: Record<string, React.CSSProperties> = {
   },
   combatantName: { flex: 1, fontSize: '0.95rem' },
   combatantStat: { fontSize: '0.8rem', color: '#888', whiteSpace: 'nowrap' },
+  playerStat: { fontSize: '0.85rem', color: '#e0e0e0', whiteSpace: 'nowrap' },
   typeBadge: {
     fontSize: '0.7rem', padding: '1px 6px', borderRadius: 10,
     border: '1px solid', textTransform: 'capitalize' as const, flexShrink: 0,
