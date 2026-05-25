@@ -5,7 +5,7 @@ import type { LiveCombatant } from '@gmassisstant/types';
 import { useBroadcastSender, useBroadcastReceiver } from '../hooks/useBroadcast';
 import { CONDITIONS, conditionIcon } from '../conditions';
 import { Open5eSearch } from '../components/Open5eSearch';
-import { GmHeader } from '../components/GmHeader';
+import { GmHeader, dropdownItem, dropdownItemActive } from '../components/GmHeader';
 import { StatBlockEditor } from '../components/StatBlockEditor';
 import { useAudio } from '../hooks/useAudio';
 import { useCurrentAdventure } from '../context/AdventureContext';
@@ -583,7 +583,21 @@ function EncounterRunner() {
 
   return (
     <div style={s.page}>
-      <GmHeader>
+      <GmHeader
+        playerMenuItems={
+          <>
+            <button style={showOnPlayer ? dropdownItemActive : dropdownItem} onClick={togglePlayer}>
+              {showOnPlayer ? '✔ Tracker visible' : '✗ Tracker hidden'}
+            </button>
+            <button style={showInitiative ? dropdownItemActive : dropdownItem} onClick={toggleShowInitiative}>
+              {showInitiative ? '✔ Initiative visible' : '✗ Initiative hidden'}
+            </button>
+            <button style={showHp ? dropdownItemActive : dropdownItem} onClick={toggleShowHp}>
+              {showHp ? '✔ HP visible' : '✗ HP hidden'}
+            </button>
+          </>
+        }
+      >
         <Link
           to="/adventures/$adventureId"
           params={{ adventureId: String(encounter.adventureId) }}
@@ -608,26 +622,6 @@ function EncounterRunner() {
           <button style={s.btnHdrDanger} onClick={endEncounter}>End Encounter</button>
           <button style={showAddForm ? s.btnHdrActive : s.btnHdr} onClick={() => setShowAddForm((v) => !v)}>
             {showAddForm ? '✕ Cancel' : '+ Add Combatant'}
-          </button>
-          <button
-            style={s.btnHdr}
-            onClick={toggleShowInitiative}
-            title={showInitiative ? 'Hide initiative from player screen' : 'Show initiative on player screen'}
-          >
-            {showInitiative ? '⚔ Hide Initiative' : '⚔ Show Initiative'}
-          </button>
-          <button
-            style={s.btnHdr}
-            onClick={toggleShowHp}
-            title={showHp ? 'Hide HP from player screen' : 'Show HP on player screen'}
-          >
-            {showHp ? '❤ Hide HP' : '❤ Show HP'}
-          </button>
-          <button
-            style={showOnPlayer ? s.btnHdrActive : s.btnHdr}
-            onClick={togglePlayer}
-          >
-            {showOnPlayer ? '⬛ Hide Tracker' : '▶ Show Tracker'}
           </button>
         </div>
       </GmHeader>

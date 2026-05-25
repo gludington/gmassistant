@@ -1,5 +1,5 @@
 import { Link } from '@tanstack/react-router';
-import { useState, type ReactNode } from 'react';
+import { useState, useEffect, useRef, type ReactNode } from 'react';
 import { useCurrentAdventure } from '../context/AdventureContext';
 import { useBroadcastSender } from '../hooks/useBroadcast';
 import { PlaylistDrawer } from './PlaylistDrawer';
@@ -8,16 +8,31 @@ export function GmHeader({
   children,
   wrap,
   rightSlot,
+  playerMenuItems,
   onPlaylistChange,
 }: {
   children: ReactNode;
   wrap?: boolean;
   rightSlot?: ReactNode;
+  playerMenuItems?: ReactNode;
   onPlaylistChange?: () => void;
 }) {
   const { adventureId } = useCurrentAdventure();
   const send = useBroadcastSender();
   const [showPlaylists, setShowPlaylists] = useState(false);
+  const [showPlayerMenu, setShowPlayerMenu] = useState(false);
+  const playerMenuRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!showPlayerMenu) return;
+    function handleClick(e: MouseEvent) {
+      if (playerMenuRef.current && !playerMenuRef.current.contains(e.target as Node)) {
+        setShowPlayerMenu(false);
+      }
+    }
+    document.addEventListener('mousedown', handleClick);
+    return () => document.removeEventListener('mousedown', handleClick);
+  }, [showPlayerMenu]);
 
   function blankScreen() {
     send({ type: 'CLEAR_IMAGE' });
@@ -47,17 +62,39 @@ export function GmHeader({
               🎵 Playlists
             </button>
           )}
-          <button type="button" style={blankBtn} onClick={blankScreen} title="Blank player screen">
-            Blank Screen
-          </button>
-          <button
-            type="button"
-            style={persistBtn}
-            onClick={() => window.open('/player', 'gmassisstant-player', 'width=1920,height=1080')}
-            title="Open player screen"
-          >
-            Player Screen
-          </button>
+
+          {/* Player Window split button */}
+          <div ref={playerMenuRef} style={splitWrap}>
+            <button
+              type="button"
+              style={{ ...splitMain, ...(showPlayerMenu ? persistBtnActive : {}) }}
+              onClick={() => setShowPlayerMenu((v) => !v)}
+              title="Player window controls"
+            >
+              🖥 Player Window ▾
+            </button>
+            {showPlayerMenu && (
+              <div style={dropdown}>
+                <button type="button" style={dropItem}
+                  onClick={() => { window.open('/player', 'gmassisstant-player', 'width=1920,height=1080'); setShowPlayerMenu(false); }}
+                >
+                  🖥 Open Player Screen
+                </button>
+                <button type="button" style={{ ...dropItem, color: '#ef5350' }}
+                  onClick={() => { blankScreen(); setShowPlayerMenu(false); }}
+                >
+                  ⬛ Blank Screen
+                </button>
+                {playerMenuItems && (
+                  <>
+                    <div style={divider} />
+                    {playerMenuItems}
+                  </>
+                )}
+              </div>
+            )}
+          </div>
+
           <Link to="/help" style={helpLink} title="Help">?</Link>
         </div>
       </header>
@@ -72,6 +109,26 @@ export function GmHeader({
     </>
   );
 }
+
+// Exported for use in dropdown menu items passed by pages.
+export const dropdownItem: React.CSSProperties = {
+  display: 'block',
+  width: '100%',
+  padding: '7px 14px',
+  background: 'none',
+  border: 'none',
+  borderRadius: 0,
+  color: '#e0e0e0',
+  fontSize: '0.825rem',
+  textAlign: 'left',
+  cursor: 'pointer',
+  whiteSpace: 'nowrap',
+};
+
+export const dropdownItemActive: React.CSSProperties = {
+  ...dropdownItem,
+  color: '#4caf50',
+};
 
 const header: React.CSSProperties = {
   padding: '12px 32px',
@@ -119,15 +176,52 @@ const persistBtnActive: React.CSSProperties = {
   color: '#1a1a2e',
 };
 
-const blankBtn: React.CSSProperties = {
+const splitWrap: React.CSSProperties = {
+  position: 'relative',
+};
+
+const splitMain: React.CSSProperties = {
   padding: '6px 12px',
   background: 'transparent',
-  color: '#ef5350',
-  border: '1px solid #ef5350',
+  color: '#c9a84c',
+  border: '1px solid #c9a84c',
   borderRadius: 4,
   cursor: 'pointer',
   fontSize: '0.825rem',
   whiteSpace: 'nowrap',
+};
+
+const dropdown: React.CSSProperties = {
+  position: 'absolute',
+  top: 'calc(100% + 4px)',
+  right: 0,
+  background: '#16213e',
+  border: '1px solid #2a2a4a',
+  borderRadius: 6,
+  boxShadow: '0 4px 16px rgba(0,0,0,0.5)',
+  zIndex: 200,
+  minWidth: 200,
+  padding: '4px 0',
+};
+
+const dropItem: React.CSSProperties = {
+  display: 'block',
+  width: '100%',
+  padding: '7px 14px',
+  background: 'none',
+  border: 'none',
+  borderRadius: 0,
+  color: '#e0e0e0',
+  fontSize: '0.825rem',
+  textAlign: 'left',
+  cursor: 'pointer',
+  whiteSpace: 'nowrap',
+};
+
+const divider: React.CSSProperties = {
+  height: 1,
+  background: '#2a2a4a',
+  margin: '4px 0',
 };
 
 const helpLink: React.CSSProperties = {
