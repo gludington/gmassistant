@@ -10,6 +10,7 @@
 
 import { Route as rootRouteImport } from './routes/__root'
 import { Route as PlayerRouteImport } from './routes/player'
+import { Route as AboutRouteImport } from './routes/about'
 import { Route as HelpRouteImport } from './routes/help'
 import { Route as IndexRouteImport } from './routes/index'
 import { Route as RunEncounterIdRouteImport } from './routes/run.$encounterId'
@@ -18,6 +19,11 @@ import { Route as AdventuresAdventureIdRouteImport } from './routes/adventures.$
 const PlayerRoute = PlayerRouteImport.update({
   id: '/player',
   path: '/player',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const AboutRoute = AboutRouteImport.update({
+  id: '/about',
+  path: '/about',
   getParentRoute: () => rootRouteImport,
 } as any)
 const HelpRoute = HelpRouteImport.update({
@@ -43,6 +49,7 @@ const AdventuresAdventureIdRoute = AdventuresAdventureIdRouteImport.update({
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
+  '/about': typeof AboutRoute
   '/help': typeof HelpRoute
   '/player': typeof PlayerRoute
   '/adventures/$adventureId': typeof AdventuresAdventureIdRoute
@@ -50,6 +57,7 @@ export interface FileRoutesByFullPath {
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
+  '/about': typeof AboutRoute
   '/help': typeof HelpRoute
   '/player': typeof PlayerRoute
   '/adventures/$adventureId': typeof AdventuresAdventureIdRoute
@@ -58,6 +66,7 @@ export interface FileRoutesByTo {
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
+  '/about': typeof AboutRoute
   '/help': typeof HelpRoute
   '/player': typeof PlayerRoute
   '/adventures/$adventureId': typeof AdventuresAdventureIdRoute
@@ -67,6 +76,7 @@ export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
   fullPaths:
     | '/'
+    | '/about'
     | '/help'
     | '/player'
     | '/adventures/$adventureId'
@@ -74,6 +84,7 @@ export interface FileRouteTypes {
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/'
+    | '/about'
     | '/help'
     | '/player'
     | '/adventures/$adventureId'
@@ -81,6 +92,7 @@ export interface FileRouteTypes {
   id:
     | '__root__'
     | '/'
+    | '/about'
     | '/help'
     | '/player'
     | '/adventures/$adventureId'
@@ -89,6 +101,7 @@ export interface FileRouteTypes {
 }
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
+  AboutRoute: typeof AboutRoute
   HelpRoute: typeof HelpRoute
   PlayerRoute: typeof PlayerRoute
   AdventuresAdventureIdRoute: typeof AdventuresAdventureIdRoute
@@ -102,6 +115,13 @@ declare module '@tanstack/react-router' {
       path: '/player'
       fullPath: '/player'
       preLoaderRoute: typeof PlayerRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/about': {
+      id: '/about'
+      path: '/about'
+      fullPath: '/about'
+      preLoaderRoute: typeof AboutRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/help': {
@@ -137,6 +157,7 @@ declare module '@tanstack/react-router' {
 
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
+  AboutRoute: AboutRoute,
   HelpRoute: HelpRoute,
   PlayerRoute: PlayerRoute,
   AdventuresAdventureIdRoute: AdventuresAdventureIdRoute,
