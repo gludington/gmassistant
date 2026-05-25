@@ -61,7 +61,7 @@ function DmHome() {
         <div style={styles.sectionHeader}>
           <h2 style={styles.sectionTitle}>Adventures</h2>
           <div style={{ display: 'flex', gap: 8 }}>
-            <button style={styles.btnSecondary} onClick={() => setShowImport(true)}>↑ Import</button>
+            <button style={styles.btnSecondary} onClick={() => setShowImport(true)}>↑ Import Adventure</button>
             <button style={styles.btnPrimary} onClick={() => setShowForm((v) => !v)}>
               {showForm ? 'Cancel' : '+ New Adventure'}
             </button>
