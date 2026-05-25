@@ -5,7 +5,7 @@ import { useBroadcastSender } from '../hooks/useBroadcast';
 import { useCurrentAdventure } from '../context/AdventureContext';
 import type { SceneFit } from '@gmassisstant/types';
 import { Open5eSearch } from '../components/Open5eSearch';
-import { GmHeader } from '../components/GmHeader';
+import { GmHeader, dropdownItem, dropdownItemActive } from '../components/GmHeader';
 import { StatBlockEditor } from '../components/StatBlockEditor';
 import { ImportModal } from '../components/ImportModal';
 import { useAudio, type Playlist, type PlaylistTrack } from '../hooks/useAudio';
@@ -277,6 +277,24 @@ function AdventureDetailPage() {
             title="Export adventure as .gma.zip"
           >↓ Export</a>
         }
+        playerMenuItems={
+          <>
+            <button
+              style={data.showInitiative ? dropdownItemActive : dropdownItem}
+              onClick={() => toggleShowInitiative.mutate(!data.showInitiative)}
+              disabled={toggleShowInitiative.isPending}
+            >
+              {data.showInitiative ? '✔ Initiative visible' : '✗ Initiative hidden'}
+            </button>
+            <button
+              style={data.showHp ? dropdownItemActive : dropdownItem}
+              onClick={() => toggleShowHp.mutate(!data.showHp)}
+              disabled={toggleShowHp.isPending}
+            >
+              {data.showHp ? '✔ HP visible' : '✗ HP hidden'}
+            </button>
+          </>
+        }
       >
         <Link to="/" style={s.back}>← Adventures</Link>
         {editingAdventure ? (
@@ -309,26 +327,6 @@ function AdventureDetailPage() {
           </div>
         )}
       </GmHeader>
-
-      <div style={s.playerScreenBar}>
-        <span style={s.playerScreenLabel}>Player screen:</span>
-        <button
-          style={data.showInitiative ? s.toggleBtnActive : s.toggleBtn}
-          onClick={() => toggleShowInitiative.mutate(!data.showInitiative)}
-          disabled={toggleShowInitiative.isPending}
-          title={data.showInitiative ? 'Hide initiative from player screen' : 'Show initiative on player screen'}
-        >
-          ⚔ Initiative
-        </button>
-        <button
-          style={data.showHp ? s.toggleBtnActive : s.toggleBtn}
-          onClick={() => toggleShowHp.mutate(!data.showHp)}
-          disabled={toggleShowHp.isPending}
-          title={data.showHp ? 'Hide HP from player screen' : 'Show HP on player screen'}
-        >
-          ❤ HP
-        </button>
-      </div>
 
       <main style={s.main}>
         {data.description && <p style={s.desc}>{data.description}</p>}
@@ -1282,20 +1280,6 @@ function EncounterForm({
 const s: Record<string, React.CSSProperties> = {
   page: { minHeight: '100vh', background: '#1a1a2e', color: '#e0e0e0', paddingBottom: 60 },
   back: { color: '#c9a84c', textDecoration: 'none', fontSize: '0.875rem', whiteSpace: 'nowrap' },
-  playerScreenBar: {
-    display: 'flex', alignItems: 'center', gap: 8,
-    padding: '6px 32px', background: '#16213e',
-    borderBottom: '1px solid #2a2a4a',
-  },
-  playerScreenLabel: { fontSize: '0.75rem', color: '#666', whiteSpace: 'nowrap' },
-  toggleBtn: {
-    padding: '4px 10px', background: 'transparent', color: '#888',
-    border: '1px solid #444', borderRadius: 4, cursor: 'pointer', fontSize: '0.75rem',
-  },
-  toggleBtnActive: {
-    padding: '4px 10px', background: '#1e2d1e', color: '#4caf50',
-    border: '1px solid #3d6a3d', borderRadius: 4, cursor: 'pointer', fontSize: '0.75rem',
-  },
   title: { margin: 0, fontSize: '1.5rem', color: '#c9a84c' },
   main: { padding: '32px', maxWidth: 900, margin: '0 auto' },
   desc: { color: '#999', marginBottom: 32 },
