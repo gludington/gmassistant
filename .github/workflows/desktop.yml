@@ -64,3 +64,25 @@ jobs:
             packages/desktop/release/*.deb
           if-no-files-found: error
           retention-days: 30
+
+  release:
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+
+    steps:
+      - name: Download all artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+          merge-multiple: true
+
+      - name: Publish pre-release
+        uses: softprops/action-gh-release@v2
+        with:
+          prerelease: true
+          tag_name: ${{ github.ref_type == 'tag' && github.ref_name || format('preview-{0}', github.run_number) }}
+          name: ${{ github.ref_type == 'tag' && github.ref_name || format('Preview build #{0}', github.run_number) }}
+          body: Test build — not for production use.
+          files: artifacts/*
