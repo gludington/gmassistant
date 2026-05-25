@@ -119,14 +119,11 @@ function PlayerScreen() {
   const sorted = [...combatants].sort((a, b) => (b.initiative ?? -999) - (a.initiative ?? -999));
 
   // Estimate how many cards fit in one column, then derive column count.
-  // Card height estimate: ~90px for a simple combatant, ~130px for groups.
-  // Round badge is ~70px; padding accounts for the rest.
   const colCount = useMemo(() => {
-    if (sorted.length <= 1) return 1;
     const availableH = window.innerHeight - 90; // subtract round badge + top padding
-    const avgCardH = 100; // px — rough average including margin
+    const avgCardH = 130; // px — conservative estimate including gap
     const perCol = Math.max(1, Math.floor(availableH / avgCardH));
-    return Math.min(3, Math.ceil(sorted.length / perCol));
+    return Math.max(1, Math.ceil(sorted.length / perCol));
   }, [sorted.length]);
 
   return (
@@ -158,7 +155,7 @@ function PlayerScreen() {
             </div>
           )}
 
-          <div style={{ ...s.cards, ...(colCount > 1 ? { columnCount: colCount, height: '100%' } : {}) }}>
+          <div style={{ ...s.cards, columnCount: colCount, height: '100%' }}>
             {sorted.map((c, i) => (
               <CombatantCard key={c.id} combatant={c} rank={i} showHp={showHp} showInitiative={showInitiative} isActive={c.id === activeCombatantId} />
             ))}
@@ -209,7 +206,7 @@ function CombatantCard({ combatant: c, rank, showHp, showInitiative, isActive }:
             {/* HP row */}
             {isGroup ? (
               isActive && (
-                <div style={s.memberGrid}>
+                <div style={{ ...s.memberGrid, gridTemplateRows: `repeat(${Math.min(c.members!.length, 6)}, auto)` }}>
                   {c.members!.map((m) => {
                     const mDead = m.currentHp === 0;
                     const mPct = m.maxHp > 0 ? (m.currentHp / m.maxHp) * 100 : 0;
@@ -472,9 +469,10 @@ const s: Record<string, React.CSSProperties> = {
     transition: 'width 0.6s cubic-bezier(0.4, 0, 0.2, 1), background 0.6s ease',
   },
   memberGrid: {
-    display: 'flex',
-    flexWrap: 'wrap' as const,
+    display: 'grid',
+    gridAutoFlow: 'column' as const,
     gap: '0.5rem',
+    alignItems: 'start',
   },
   memberCell: {
     display: 'flex',

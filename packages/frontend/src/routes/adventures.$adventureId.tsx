@@ -96,6 +96,7 @@ function AdventureDetailPage() {
   const qKey = ['adventure', adventureId];
   const send = useBroadcastSender();
   const { setAdventureId } = useCurrentAdventure();
+  const [playerImage, setPlayerImage] = useState<{ filePath: string; fit: SceneFit } | null>(null);
 
   useEffect(() => {
     setAdventureId(Number(adventureId));
@@ -405,12 +406,14 @@ function AdventureDetailPage() {
               onSend={(filePath, fit) => {
                 send({ type: 'SHOW_IMAGE', payload: { filePath, fit } });
                 send({ type: 'TOGGLE_INITIATIVE', payload: { visible: false } });
+                setPlayerImage({ filePath, fit });
                 try {
                   const raw = localStorage.getItem('gma:initiative');
                   if (raw) localStorage.setItem('gma:initiative', JSON.stringify({ ...JSON.parse(raw), visible: false }));
                 } catch {}
               }}
-              onClearPlayer={() => send({ type: 'CLEAR_IMAGE' })}
+              onClearPlayer={() => { send({ type: 'CLEAR_IMAGE' }); setPlayerImage(null); }}
+              playerImage={playerImage}
             />
           ))}
         </Section>
@@ -456,6 +459,7 @@ function SceneCard({
   onInvalidate,
   onSend,
   onClearPlayer,
+  playerImage,
 }: {
   scene: ImageScene;
   playlists: Playlist[];
@@ -464,6 +468,7 @@ function SceneCard({
   onInvalidate: () => void;
   onSend: (filePath: string, fit: SceneFit) => void;
   onClearPlayer: () => void;
+  playerImage: { filePath: string; fit: SceneFit } | null;
 }) {
   const [expanded, setExpanded] = useState(false);
   const [editingName, setEditingName] = useState(false);
@@ -484,14 +489,20 @@ function SceneCard({
   });
 
   const updateImageFit = useMutation({
-    mutationFn: async ({ id, fit }: { id: number; fit: SceneFit }) => {
+    mutationFn: async ({ id, fit, filePath }: { id: number; fit: SceneFit; filePath: string }) => {
       await fetch(`/api/adventures/scenes/images/${id}`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ fit }),
       });
+      return { fit, filePath };
     },
-    onSuccess: onInvalidate,
+    onSuccess: ({ fit, filePath }) => {
+      onInvalidate();
+      if (playerImage?.filePath === filePath) {
+        onSend(filePath, fit);
+      }
+    },
   });
 
   const addImage = useMutation({
@@ -694,7 +705,7 @@ function SceneCard({
                     <button
                       key={f}
                       style={img.fit === f ? s.fitBtnActive : s.fitBtn}
-                      onClick={() => updateImageFit.mutate({ id: img.id, fit: f })}
+                      onClick={() => updateImageFit.mutate({ id: img.id, fit: f, filePath: img.filePath })}
                       title={f === 'cover' ? 'Fill screen (crop)' : f === 'fit' ? 'Fit to screen (letterbox)' : 'Natural size (centered)'}
                     >
                       {f}
