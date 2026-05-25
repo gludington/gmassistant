@@ -10,6 +10,7 @@ export interface PlaylistTrack {
 }
 
 export interface Playlist {
+  loop: boolean;
   id: number;
   adventureId: number;
   name: string;
@@ -150,6 +151,11 @@ export function AudioProvider({ children }: { children: ReactNode }) {
     if (nextPos < playOrderRef.current.length) {
       playPosRef.current = nextPos;
       playTrackInner(currentPlaylist, playOrderRef.current[nextPos]);
+    } else if (currentPlaylist.loop) {
+      const { order, pos } = buildPlayOrder(currentPlaylist.tracks.length, currentPlaylist.playMode ?? stateRef.current.playMode, 0);
+      playOrderRef.current = order;
+      playPosRef.current = pos;
+      playTrackInner(currentPlaylist, order[pos]);
     } else {
       setState((s) => ({ ...s, isPlaying: false }));
     }

@@ -15,7 +15,7 @@ import {
   sessions as sessionsTable,
 } from '../db/schema.js';
 
-export const SCHEMA_VERSION = 0;
+export const SCHEMA_VERSION = 1;
 
 // ─── Public types ─────────────────────────────────────────────────────────────
 
@@ -49,7 +49,7 @@ interface TrackItem {
 
 interface PlaylistItem {
   localId: number; name: string; sortOrder: number;
-  playMode: 'sequential' | 'shuffle'; tracks: TrackItem[];
+  playMode: 'sequential' | 'shuffle'; loop: boolean; tracks: TrackItem[];
 }
 
 interface CombatantItem {
@@ -79,7 +79,7 @@ interface AdventureData {
 }
 
 interface PlaylistData {
-  playlist: { name: string; sortOrder: number; playMode: 'sequential' | 'shuffle' };
+  playlist: { name: string; sortOrder: number; playMode: 'sequential' | 'shuffle'; loop: boolean };
   tracks: TrackItem[];
 }
 
@@ -207,6 +207,7 @@ export async function exportAdventure(db: AppDb, storage: StorageAdapter, advent
       name: pl.name,
       sortOrder: pl.sortOrder,
       playMode: pl.playMode,
+      loop: pl.loop,
       tracks: trackRows
         .filter((t) => t.playlistId === pl.id)
         .map((t) => ({
@@ -268,7 +269,7 @@ export async function exportPlaylist(db: AppDb, storage: StorageAdapter, playlis
   }
 
   const data: PlaylistData = {
-    playlist: { name: pl.name, sortOrder: pl.sortOrder, playMode: pl.playMode },
+    playlist: { name: pl.name, sortOrder: pl.sortOrder, playMode: pl.playMode, loop: pl.loop },
     tracks: trackRows.map((t) => ({
       name: t.name, type: t.type, url: t.url, sortOrder: t.sortOrder,
       ...(t.type === 'file' ? { fileKey: t.url.replace('/uploads/', '') } : {}),
@@ -400,7 +401,7 @@ async function applyAdventureImport(
   const playlistIdMap = new Map<number, number>();
   for (const pl of d.playlists) {
     const [newPl] = await db.insert(playlistsTable).values({
-      adventureId: newAdventure.id, name: pl.name, sortOrder: pl.sortOrder, playMode: pl.playMode,
+      adventureId: newAdventure.id, name: pl.name, sortOrder: pl.sortOrder, playMode: pl.playMode, loop: pl.loop ?? false,
     }).returning();
     playlistIdMap.set(pl.localId, newPl.id);
     for (const t of pl.tracks) {
@@ -451,7 +452,7 @@ async function applyPlaylistImport(
   await storeFiles(storage, files);
 
   const [newPl] = await db.insert(playlistsTable).values({
-    adventureId, name, sortOrder: d.playlist.sortOrder, playMode: d.playlist.playMode,
+    adventureId, name, sortOrder: d.playlist.sortOrder, playMode: d.playlist.playMode, loop: d.playlist.loop ?? false,
   }).returning();
 
   for (const t of d.tracks) {

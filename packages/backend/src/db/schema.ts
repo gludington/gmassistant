@@ -18,6 +18,7 @@ export const playlists = sqliteTable('playlists', {
   name: text('name').notNull(),
   sortOrder: integer('sort_order').notNull().default(0),
   playMode: text('play_mode', { enum: ['sequential', 'shuffle'] }).notNull().default('sequential'),
+  loop: integer('loop', { mode: 'boolean' }).notNull().default(false),
 });
 
 export const playlistTracks = sqliteTable('playlist_tracks', {
