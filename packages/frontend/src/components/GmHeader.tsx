@@ -95,6 +95,7 @@ export function GmHeader({
             )}
           </div>
 
+          <Link to="/about" style={helpLink} title="About">i</Link>
           <Link to="/help" style={helpLink} title="Help">?</Link>
         </div>
       </header>
