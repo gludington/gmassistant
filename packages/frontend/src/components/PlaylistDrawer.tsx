@@ -21,6 +21,8 @@ export function PlaylistDrawer({
   const [newName, setNewName] = useState('');
   const [showNewForm, setShowNewForm] = useState(false);
   const [deleteTarget, setDeleteTarget] = useState<Playlist | null>(null);
+  const [renamingId, setRenamingId] = useState<number | null>(null);
+  const [renameName, setRenameName] = useState('');
 
   const { data: playlists = [] } = useQuery<Playlist[]>({
     queryKey: ['playlists-drawer', adventureId],
@@ -94,6 +96,28 @@ export function PlaylistDrawer({
     onSuccess: invalidate,
   });
 
+  const updateTrack = useMutation({
+    mutationFn: async ({ id, name, url, type }: { id: number; name: string; url: string; type: 'file' | 'youtube' }) => {
+      await fetch(`/api/playlists/tracks/${id}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name, url, type }),
+      });
+    },
+    onSuccess: invalidate,
+  });
+
+  const renamePlaylist = useMutation({
+    mutationFn: async ({ id, name }: { id: number; name: string }) => {
+      await fetch(`/api/playlists/${id}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name }),
+      });
+    },
+    onSuccess: () => { invalidate(); setRenamingId(null); },
+  });
+
   return (
     <div style={s.drawer}>
       {/* Header */}
@@ -149,6 +173,11 @@ export function PlaylistDrawer({
                 </div>
                 <div style={s.cardActions}>
                   <button
+                    style={{ ...s.iconBtn, color: renamingId === pl.id ? '#c9a84c' : '#888' }}
+                    onClick={() => { setRenamingId(pl.id); setRenameName(pl.name); }}
+                    title="Rename playlist"
+                  >✏</button>
+                  <button
                     style={{ ...s.modeBtn, color: pl.playMode === 'shuffle' ? '#c9a84c' : '#888' }}
                     onClick={() => setPlayMode.mutate({ id: pl.id, playMode: pl.playMode === 'shuffle' ? 'sequential' : 'shuffle' })}
                     title={pl.playMode === 'shuffle' ? 'Shuffle on (click to turn off)' : 'Shuffle off (click to turn on)'}
@@ -184,12 +213,30 @@ export function PlaylistDrawer({
                 </div>
               </div>
 
+              {renamingId === pl.id && (
+                <form
+                  style={{ display: 'flex', gap: 6, padding: '4px 10px 8px', borderTop: '1px solid #1a1a3a' }}
+                  onSubmit={(e) => { e.preventDefault(); if (renameName.trim()) renamePlaylist.mutate({ id: pl.id, name: renameName.trim() }); }}
+                >
+                  <input
+                    style={{ ...s.input, flex: 1, width: 'auto', padding: '4px 8px', fontSize: '0.8rem' }}
+                    value={renameName}
+                    onChange={(e) => setRenameName(e.target.value)}
+                    autoFocus
+                    onKeyDown={(e) => e.key === 'Escape' && setRenamingId(null)}
+                  />
+                  <button style={{ ...s.btnPrimary, flexShrink: 0 }} type="submit" disabled={!renameName.trim() || renamePlaylist.isPending}>✓</button>
+                  <button style={{ ...s.btnGhost, flexShrink: 0 }} type="button" onClick={() => setRenamingId(null)}>✕</button>
+                </form>
+              )}
+
               {isExpanded && (
                 <div style={s.trackSection}>
                   <TrackList
                     tracks={pl.tracks}
                     onDelete={(id) => deleteTrack.mutate(id)}
                     onReorder={(ordered) => reorderTracks.mutate(ordered)}
+                    onUpdate={(id, data) => updateTrack.mutate({ id, ...data })}
                   />
                   {addingTrackId === pl.id ? (
                     <AddTrackForm
@@ -226,15 +273,19 @@ export function PlaylistDrawer({
 
 // ── TrackList ─────────────────────────────────────────────────────────────────
 
-function TrackList({ tracks, onDelete, onReorder }: {
+function TrackList({ tracks, onDelete, onReorder, onUpdate }: {
   tracks: PlaylistTrack[];
   onDelete: (id: number) => void;
   onReorder: (ordered: PlaylistTrack[]) => void;
+  onUpdate: (id: number, data: { name: string; url: string; type: 'file' | 'youtube' }) => void;
 }) {
   const [localTracks, setLocalTracks] = useState<PlaylistTrack[]>(tracks);
   const [draggingId, setDraggingId] = useState<number | null>(null);
   const lastOverIdRef = useRef<number | null>(null);
   const droppedRef = useRef(false);
+  const [editingId, setEditingId] = useState<number | null>(null);
+  const [editName, setEditName] = useState('');
+  const [editUrl, setEditUrl] = useState('');
 
   useEffect(() => {
     if (draggingId === null) setLocalTracks(tracks);
@@ -279,21 +330,60 @@ function TrackList({ tracks, onDelete, onReorder }: {
   return (
     <div style={{ marginBottom: 4 }}>
       {localTracks.map((track) => (
-        <div
-          key={track.id}
-          draggable
-          onDragStart={() => handleDragStart(track.id)}
-          onDragOver={(e) => handleDragOver(e, track.id)}
-          onDrop={handleDrop}
-          onDragEnd={handleDragEnd}
-          style={{ ...s.trackRow, opacity: track.id === draggingId ? 0.35 : 1 }}
-        >
-          <span style={s.dragHandle} title="Drag to reorder">⠿</span>
-          <span style={{ fontSize: '0.72rem', flexShrink: 0, color: '#666' }}>
-            {track.type === 'youtube' ? '▶' : '🎵'}
-          </span>
-          <span style={s.trackName}>{track.name}</span>
-          <button style={{ ...s.iconBtn, color: '#ef5350' }} onClick={() => onDelete(track.id)} title="Delete track">🗑</button>
+        <div key={track.id}>
+          {editingId === track.id ? (
+            <div style={{ ...s.trackRow, flexDirection: 'column', alignItems: 'stretch', gap: 4, padding: '6px 8px', cursor: 'default' }}>
+              <input
+                style={{ ...s.input, padding: '3px 7px', fontSize: '0.78rem' }}
+                value={editName}
+                onChange={(e) => setEditName(e.target.value)}
+                placeholder="Track name"
+                autoFocus
+                onKeyDown={(e) => e.key === 'Escape' && setEditingId(null)}
+              />
+              {track.type === 'youtube' && (
+                <input
+                  style={{ ...s.input, padding: '3px 7px', fontSize: '0.78rem' }}
+                  value={editUrl}
+                  onChange={(e) => setEditUrl(e.target.value)}
+                  placeholder="YouTube URL"
+                  onKeyDown={(e) => e.key === 'Escape' && setEditingId(null)}
+                />
+              )}
+              <div style={{ display: 'flex', gap: 4 }}>
+                <button
+                  style={s.btnPrimary}
+                  onClick={() => {
+                    onUpdate(track.id, { name: editName.trim() || track.name, url: editUrl.trim() || track.url, type: track.type });
+                    setEditingId(null);
+                  }}
+                  disabled={!editName.trim()}
+                >Save</button>
+                <button style={s.btnGhost} onClick={() => setEditingId(null)}>Cancel</button>
+              </div>
+            </div>
+          ) : (
+            <div
+              draggable
+              onDragStart={() => handleDragStart(track.id)}
+              onDragOver={(e) => handleDragOver(e, track.id)}
+              onDrop={handleDrop}
+              onDragEnd={handleDragEnd}
+              style={{ ...s.trackRow, opacity: track.id === draggingId ? 0.35 : 1 }}
+            >
+              <span style={s.dragHandle} title="Drag to reorder">⠿</span>
+              <span style={{ fontSize: '0.72rem', flexShrink: 0, color: '#666' }}>
+                {track.type === 'youtube' ? '▶' : '🎵'}
+              </span>
+              <span style={s.trackName}>{track.name}</span>
+              <button
+                style={{ ...s.iconBtn, color: '#888' }}
+                onClick={() => { setEditingId(track.id); setEditName(track.name); setEditUrl(track.url); }}
+                title="Edit track"
+              >✏</button>
+              <button style={{ ...s.iconBtn, color: '#ef5350' }} onClick={() => onDelete(track.id)} title="Delete track">🗑</button>
+            </div>
+          )}
         </div>
       ))}
     </div>
