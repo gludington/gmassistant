@@ -43,7 +43,7 @@ export type Resolutions = Record<string, ConflictResolution>;
 // ─── Internal data shapes ─────────────────────────────────────────────────────
 
 interface TrackItem {
-  name: string; type: 'file' | 'youtube'; url: string; sortOrder: number;
+  name: string; type: 'file' | 'youtube' | 'spotify'; url: string; sortOrder: number;
   fileKey?: string;
 }
 

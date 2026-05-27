@@ -3,7 +3,11 @@ import { useAudio } from '../hooks/useAudio';
 
 declare global {
   interface Window {
-    electronAPI?: { setFullScreen(flag: boolean): void; openYouTubeLogin(): void };
+    electronAPI?: {
+      setFullScreen(flag: boolean): void;
+      openYouTubeLogin(): void;
+      openSpotifyLogin(): void;
+    };
   }
 }
 
@@ -15,12 +19,20 @@ function openYouTube() {
   }
 }
 
+function openSpotify() {
+  if (window.electronAPI) {
+    window.electronAPI.openSpotifyLogin();
+  } else {
+    window.open('https://open.spotify.com', '_blank', 'noopener');
+  }
+}
+
 export function AudioBar() {
   const { currentPathname } = useRouterState({
     select: (s) => ({ currentPathname: s.location.pathname }),
   });
 
-  const { currentPlaylist, currentTrackIndex, isPlaying, volume, playMode, ytVisible, currentTime, duration, pause, resume, stop, nextTrack, prevTrack, setVolume, setPlayMode, setYtVisible, seekTo } = useAudio();
+  const { currentPlaylist, currentTrackIndex, isPlaying, volume, playMode, ytVisible, spotifyVisible, currentTime, duration, pause, resume, stop, nextTrack, prevTrack, setVolume, setPlayMode, setYtVisible, setSpotifyVisible, seekTo } = useAudio();
 
   if (currentPathname === '/player') return null;
 
@@ -78,6 +90,15 @@ export function AudioBar() {
             📺
           </button>
         )}
+        {track?.type === 'spotify' && (
+          <button
+            style={{ ...btn, color: spotifyVisible ? '#1db954' : '#555', borderColor: spotifyVisible ? '#1db954' : '#333' }}
+            onClick={() => setSpotifyVisible(!spotifyVisible)}
+            title={spotifyVisible ? 'Hide Spotify player' : 'Show Spotify player'}
+          >
+            ♫
+          </button>
+        )}
       </div>
       <div style={volWrap}>
         <span style={volLabel}>🔊</span>
@@ -92,6 +113,7 @@ export function AudioBar() {
         <span style={volLabel}>{volume}</span>
       </div>
       <button style={ytLoginBtn} onClick={openYouTube} title="Log in to YouTube">YT</button>
+      <button style={{ ...ytLoginBtn, color: '#1db954' }} onClick={openSpotify} title="Log in to Spotify">SP</button>
     </div>
   );
 }

@@ -27,7 +27,7 @@ export const playlistTracks = sqliteTable('playlist_tracks', {
     .notNull()
     .references(() => playlists.id, { onDelete: 'cascade' }),
   name: text('name').notNull(),
-  type: text('type', { enum: ['file', 'youtube'] }).notNull().default('file'),
+  type: text('type', { enum: ['file', 'youtube', 'spotify'] }).notNull().default('file'),
   url: text('url').notNull(),
   sortOrder: integer('sort_order').notNull().default(0),
 });

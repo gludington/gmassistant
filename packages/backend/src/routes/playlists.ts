@@ -75,7 +75,7 @@ router.delete('/:id', async (c) => {
 const trackSchema = z.object({
   playlistId: z.number().int(),
   name: z.string().min(1),
-  type: z.enum(['file', 'youtube']),
+  type: z.enum(['file', 'youtube', 'spotify']),
   url: z.string().min(1),
   sortOrder: z.number().int().optional().default(0),
 });

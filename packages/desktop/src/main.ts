@@ -96,6 +96,10 @@ const menu = Menu.buildFromTemplate([
         label: 'Log in to YouTube…',
         click() { ipcMain.emit('open-youtube-login'); },
       },
+      {
+        label: 'Log in to Spotify…',
+        click() { ipcMain.emit('open-spotify-login'); },
+      },
       { type: 'separator' },
       { role: 'quit' },
     ],
@@ -117,6 +121,16 @@ ipcMain.on('open-youtube-login', () => {
   win.loadURL('https://www.youtube.com');
 });
 
+ipcMain.on('open-spotify-login', () => {
+  const win = new BrowserWindow({
+    width: 1024,
+    height: 768,
+    title: 'Log in to Spotify',
+    webPreferences: { contextIsolation: true },
+  });
+  win.loadURL('https://open.spotify.com');
+});
+
 electronApp.whenReady().then(async () => {
   try {
     session.defaultSession.webRequest.onHeadersReceived((details, callback) => {
@@ -127,7 +141,7 @@ electronApp.whenReady().then(async () => {
             ...details.responseHeaders,
             'Content-Security-Policy': [
               "default-src 'self' 'unsafe-inline' 'unsafe-eval' https: data: blob:; " +
-                'frame-src https://www.youtube.com https://www.youtube-nocookie.com;',
+                'frame-src https://www.youtube.com https://www.youtube-nocookie.com https://open.spotify.com;',
             ],
           },
         });
