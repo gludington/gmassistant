@@ -6,6 +6,8 @@ GM Assistant brings together the tools a GM reaches for most during a session, w
 
 The GM-facing combat view. Manages initiative, HP, and conditions with a live feed to the Player Screen.
 
+![Encounter Tracker](/help/tracker.png)
+
 - **Initiative** — roll all d20s at once or set manually per combatant
 - **HP editing** — click to type, or use the +/− buttons and the damage/heal fields
 - **Conditions** — Blinded, Charmed, Frightened, and 15+ others; appear as coloured chips on the player screen; Bloodied is applied automatically
@@ -38,6 +40,8 @@ Push atmospheric artwork to the Player Screen instantly.
 
 A dedicated second window for a TV, projector, or second monitor.
 
+![Player Screen](/help/players.png)
+
 - Shows scene images as the background
 - Initiative tracker overlays the bottom of the screen during combat
 - HP bars, condition chips, and active-combatant highlight all update in real time
@@ -47,6 +51,8 @@ A dedicated second window for a TV, projector, or second monitor.
 ## Adventure Management
 
 Adventures are the top-level container for everything.
+
+![Adventure Manager — Players and Encounters](/help/encounters.png)
 
 - **Players** — add persistent characters once; they appear automatically in every encounter
 - **Scenes** — organise images by location or mood
