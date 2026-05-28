@@ -11,7 +11,9 @@
     "desktop:build": "pnpm desktop:compile && cd packages/desktop && electron-builder --linux --win --mac",
     "desktop:build:linux": "pnpm desktop:compile && cd packages/desktop && electron-builder --linux",
     "desktop:build:win": "pnpm desktop:compile && cd packages/desktop && electron-builder --win",
-    "desktop:build:mac": "pnpm desktop:compile && cd packages/desktop && electron-builder --mac"
+    "desktop:build:mac": "pnpm desktop:compile && cd packages/desktop && electron-builder --mac",
+    "docs:dev": "pnpm --filter @gmassisstant/docs dev",
+    "docs:build": "pnpm --filter @gmassisstant/docs build"
   },
   "devDependencies": {
     "concurrently": "^9.0.0",

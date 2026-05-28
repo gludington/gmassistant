@@ -1,0 +1,16 @@
+{
+  "name": "@gmassisstant/docs",
+  "version": "0.0.1",
+  "private": true,
+  "scripts": {
+    "copy-assets": "node -e \"const fs=require('fs');fs.mkdirSync('public/help',{recursive:true});fs.cpSync('../frontend/public/help','public/help',{recursive:true});\"",
+    "prebuild": "pnpm copy-assets",
+    "predev": "pnpm copy-assets",
+    "dev": "vitepress dev",
+    "build": "vitepress build",
+    "preview": "vitepress preview"
+  },
+  "devDependencies": {
+    "vitepress": "^1.6.0"
+  }
+}
