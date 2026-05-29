@@ -705,15 +705,19 @@ function SceneCard({
                   <span style={s.dragHandle} title="Drag to reorder">⠿</span>
                   <div style={s.tileOverlay} className="tile-overlay">
                     <button
-                      style={s.tileBtn}
-                      title="Push to player screen"
+                      style={{ ...s.tileBtn, ...(playerImage?.filePath === img.filePath ? { background: '#c9a84c', color: '#1a1a2e' } : {}) }}
+                      title={playerImage?.filePath === img.filePath ? 'Hide from player screen' : 'Push to player screen'}
                       onClick={() => {
-                        onSend(img.filePath, img.fit);
-                        const imgPlaylist = playlists.find((p) => p.id === img.playlistId) ?? null;
-                        if (imgPlaylist && imgPlaylist.tracks.length > 0) playPlaylist(imgPlaylist);
+                        if (playerImage?.filePath === img.filePath) {
+                          onClearPlayer();
+                        } else {
+                          onSend(img.filePath, img.fit);
+                          const imgPlaylist = playlists.find((p) => p.id === img.playlistId) ?? null;
+                          if (imgPlaylist && imgPlaylist.tracks.length > 0) playPlaylist(imgPlaylist);
+                        }
                       }}
                     >
-                      ▶ Show
+                      {playerImage?.filePath === img.filePath ? '■ Hide' : '▶ Show'}
                     </button>
                     <div style={s.tileActions}>
                       <button

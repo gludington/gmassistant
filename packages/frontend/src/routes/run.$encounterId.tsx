@@ -1,6 +1,6 @@
 import { createFileRoute, Link, useNavigate } from '@tanstack/react-router';
 import { useQuery } from '@tanstack/react-query';
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useMemo } from 'react';
 import type { LiveCombatant } from '@gmassisstant/types';
 import { useBroadcastSender, useBroadcastReceiver } from '../hooks/useBroadcast';
 import { CONDITIONS, conditionIcon } from '../conditions';
@@ -55,6 +55,7 @@ interface RunCombatant extends LiveCombatant {
   legendaryActionsRemaining?: number;
   legendaryResistancesMax?: number;
   legendaryResistancesRemaining?: number;
+  usedRechargeAbilities?: string[];
   autoExpanded?: boolean;
   members?: { id: number; label: string; currentHp: number; maxHp: number; conditions: string[] }[];
 }
@@ -141,6 +142,7 @@ function toRunCombatant(c: BaseCombatant): RunCombatant {
     legendaryActionsRemaining: legendaryActionsMax,
     legendaryResistancesMax,
     legendaryResistancesRemaining: legendaryResistancesMax,
+    usedRechargeAbilities: [],
   };
 }
 
@@ -723,6 +725,17 @@ function CombatantRow({
   const isGroup = c.type === 'group';
   const isGmOnly = c.type === 'event' || c.type === 'lair';
 
+  const rechargeActions = useMemo(() => {
+    if (!c.statBlock) return [];
+    try {
+      const sb = JSON.parse(c.statBlock);
+      const allActions: { name?: string; action_type?: string; usage_limits?: { type?: string; param?: number } }[] = sb.actions ?? [];
+      return allActions
+        .filter((a) => a.usage_limits?.type === 'RECHARGE_ON_ROLL' && a.usage_limits.param != null)
+        .map((a) => ({ name: a.name ?? '', min: a.usage_limits!.param! }));
+    } catch { return []; }
+  }, [c.statBlock]);
+
   function toggleCondition(name: string, hasLevel?: true) {
     const existing = c.conditions.find((x) => x === name || x.startsWith(name + ' '));
     const next = existing
@@ -872,7 +885,7 @@ function CombatantRow({
         {onShowStatBlock && (
           <button style={s.editBtn} onClick={onShowStatBlock} title="View stat block">📖</button>
         )}
-        {(c.legendaryActionsMax != null || c.legendaryResistancesMax != null) && (
+        {(rechargeActions.length > 0 || c.legendaryActionsMax != null || c.legendaryResistancesMax != null) && (
           <div style={{ width: '100%', display: 'flex', gap: 6, flexWrap: 'wrap' }}>
             {c.legendaryActionsMax != null && (
               <LegendaryWidget
@@ -893,6 +906,19 @@ function CombatantRow({
                 onSetMax={(n) => onUpdate({ legendaryResistancesMax: n, legendaryResistancesRemaining: Math.min(c.legendaryResistancesRemaining ?? n, n) })}
               />
             )}
+            {rechargeActions.map((ra) => (
+              <RechargeWidget
+                key={ra.name}
+                name={ra.name}
+                min={ra.min}
+                used={(c.usedRechargeAbilities ?? []).includes(ra.name)}
+                isActive={isActive}
+                onToggle={() => {
+                  const used = c.usedRechargeAbilities ?? [];
+                  onUpdate({ usedRechargeAbilities: used.includes(ra.name) ? used.filter((n) => n !== ra.name) : [...used, ra.name] });
+                }}
+              />
+            ))}
           </div>
         )}
       </div>
@@ -1405,6 +1431,40 @@ const lwAdj: React.CSSProperties = {
   color: '#666', cursor: 'pointer', fontSize: '0.65rem',
   padding: '0 3px', lineHeight: '1.4', marginLeft: 1,
 };
+
+// ── RechargeWidget ────────────────────────────────────────────────────────────
+
+function RechargeWidget({ name, min, used, isActive, onToggle }: {
+  name: string; min: number; used: boolean; isActive: boolean; onToggle: () => void;
+}) {
+  const needsRoll = used && isActive;
+  return (
+    <div
+      style={{
+        display: 'flex', alignItems: 'center', gap: 4,
+        background: needsRoll ? '#3a2a0a' : (used ? '#1a1a1a' : '#0a1a0a'),
+        border: `1px solid ${needsRoll ? '#c9a84c' : (used ? '#333' : '#2a4a2a')}`,
+        borderRadius: 4, padding: '2px 7px', flexShrink: 0,
+        transition: 'background 0.2s, border-color 0.2s',
+      }}
+      title={used ? (needsRoll ? `Roll d6 — recharges on ${min}–6` : `${name} used`) : `${name} available`}
+    >
+      <button
+        onClick={onToggle}
+        style={{
+          background: 'none', border: 'none', cursor: 'pointer',
+          fontSize: '0.85rem', padding: '0 1px', lineHeight: 1,
+          color: used ? '#444' : '#4caf50',
+        }}
+        title={used ? 'Mark as recharged' : 'Mark as used'}
+      >{used ? '○' : '●'}</button>
+      {needsRoll && <span style={{ fontSize: '0.75rem' }}>🎲</span>}
+      <span style={{ fontSize: '0.72rem', color: needsRoll ? '#c9a84c' : (used ? '#555' : '#888'), fontWeight: needsRoll ? 600 : 400 }}>
+        {name} ({min}–6)
+      </span>
+    </div>
+  );
+}
 
 // ── StatBlockPanel ────────────────────────────────────────────────────────────
 
