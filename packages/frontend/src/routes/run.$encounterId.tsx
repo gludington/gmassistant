@@ -214,6 +214,16 @@ function EncounterRunner() {
     refetchOnMount: 'always',
   });
 
+  const { data: otherEncounters = [] } = useQuery<{ id: number; name: string }[]>({
+    queryKey: ['adventure-encounters', encounter?.adventureId],
+    queryFn: async () => {
+      const res = await fetch(`/api/adventures/${encounter!.adventureId}`);
+      const data = await res.json();
+      return (data.encounters as { id: number; name: string }[]).filter((e) => e.id !== Number(encounterId));
+    },
+    enabled: !!encounter,
+  });
+
   useEffect(() => {
     if (encounter) {
       setAdventureId(encounter.adventureId);
@@ -533,6 +543,29 @@ function EncounterRunner() {
     if (showOnPlayer) broadcast(next, true);
   }
 
+  async function copyCombatant(c: RunCombatant, targetEncounterId: number | null) {
+    const base = {
+      name: c.name,
+      maxHp: c.maxHp,
+      initiativeModifier: c.initiativeModifier,
+      type: c.type,
+      color: c.color ?? '#888888',
+      description: c.description,
+      visibleToPlayers: c.visibleToPlayers,
+      statBlock: c.statBlock ?? undefined,
+      members: c.members?.map((m) => ({ label: m.label, maxHp: m.maxHp })),
+    };
+    if (targetEncounterId === null) {
+      addCombatant({ ...base, initiative: null });
+    } else {
+      await fetch('/api/encounters/combatants', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ ...base, encounterId: targetEncounterId }),
+      });
+    }
+  }
+
   async function updateCombatantBase(id: number, values: { name: string; maxHp: number; initiativeModifier: number; type: RunCombatant['type']; color: string; description?: string | null; statBlock?: string }) {
     const c = combatants.find((x) => x.id === id);
     await fetch(`/api/encounters/combatants/${id}`, {
@@ -676,6 +709,8 @@ function EncounterRunner() {
               onToggleVisible={() => toggleVisibility(c.id)}
               onSetActive={() => activateCombatant(c.id)}
               onShowStatBlock={c.statBlock ? () => setStatBlockCombatant(c) : undefined}
+              onCopy={(targetEncounterId) => copyCombatant(c, targetEncounterId)}
+              otherEncounters={otherEncounters}
             />
           ))}
         </div>
@@ -706,6 +741,8 @@ function CombatantRow({
   onToggleVisible,
   onSetActive,
   onShowStatBlock,
+  onCopy,
+  otherEncounters,
 }: {
   combatant: RunCombatant;
   isActive: boolean;
@@ -716,12 +753,15 @@ function CombatantRow({
   onToggleVisible: () => void;
   onSetActive: () => void;
   onShowStatBlock?: () => void;
+  onCopy: (targetEncounterId: number | null) => void;
+  otherEncounters: { id: number; name: string }[];
 }) {
   const [editingBase, setEditingBase] = useState(false);
   const [showCondPicker, setShowCondPicker] = useState(false);
   const [memberCondPickerId, setMemberCondPickerId] = useState<number | null>(null);
   const [hpAdjustVal, setHpAdjustVal] = useState('');
   const [memberAdjustVals, setMemberAdjustVals] = useState<Record<number, string>>({});
+  const [showCopyMenu, setShowCopyMenu] = useState(false);
   const isGroup = c.type === 'group';
   const isGmOnly = c.type === 'event' || c.type === 'lair';
 
@@ -885,6 +925,38 @@ function CombatantRow({
         {onShowStatBlock && (
           <button style={s.editBtn} onClick={onShowStatBlock} title="View stat block">📖</button>
         )}
+        {!c.isAdventurePlayer && (
+          <div style={{ position: 'relative', display: 'inline-block' }}>
+            <button style={s.editBtn} title="Copy combatant" onClick={() => setShowCopyMenu((v) => !v)}>⧉</button>
+            {showCopyMenu && (
+              <div style={{ position: 'absolute', top: '100%', left: 0, zIndex: 100, background: '#1a1a2e', border: '1px solid #333', borderRadius: 6, minWidth: 180, boxShadow: '0 4px 16px rgba(0,0,0,0.5)', padding: '4px 0' }}
+                onMouseLeave={() => setShowCopyMenu(false)}
+              >
+                <button
+                  style={{ display: 'block', width: '100%', textAlign: 'left', padding: '6px 14px', background: 'none', border: 'none', color: '#e0e0e0', cursor: 'pointer', fontSize: '0.82rem' }}
+                  onMouseEnter={(e) => (e.currentTarget.style.background = '#2a2a4a')}
+                  onMouseLeave={(e) => (e.currentTarget.style.background = 'none')}
+                  onClick={() => { onCopy(null); setShowCopyMenu(false); }}
+                >📋 Copy to this encounter</button>
+                {otherEncounters.length > 0 && (
+                  <>
+                    <div style={{ borderTop: '1px solid #333', margin: '4px 0' }} />
+                    {otherEncounters.map((e) => (
+                      <button
+                        key={e.id}
+                        style={{ display: 'block', width: '100%', textAlign: 'left', padding: '6px 14px', background: 'none', border: 'none', color: '#aaa', cursor: 'pointer', fontSize: '0.82rem', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}
+                        onMouseEnter={(ev) => (ev.currentTarget.style.background = '#2a2a4a')}
+                        onMouseLeave={(ev) => (ev.currentTarget.style.background = 'none')}
+                        onClick={() => { onCopy(e.id); setShowCopyMenu(false); }}
+                        title={`Copy to: ${e.name}`}
+                      >↗ {e.name}</button>
+                    ))}
+                  </>
+                )}
+              </div>
+            )}
+          </div>
+        )}
         {(rechargeActions.length > 0 || c.legendaryActionsMax != null || c.legendaryResistancesMax != null) && (
           <div style={{ width: '100%', display: 'flex', gap: 6, flexWrap: 'wrap' }}>
             {c.legendaryActionsMax != null && (
@@ -994,6 +1066,11 @@ function CombatantRow({
                       disabled={!memberAdjustVals[m.id] || parseInt(memberAdjustVals[m.id], 10) <= 0}
                       onClick={() => { const n = parseInt(memberAdjustVals[m.id] ?? '', 10); if (n > 0) { adjustMemberHp(m.id, n); setMemberAdjustVals((prev) => ({ ...prev, [m.id]: '' })); } }}
                     >H</button>
+                    <button
+                      style={{ ...s.editBtn, color: '#e05c5c', fontSize: '0.8rem', marginLeft: 2 }}
+                      onClick={() => { if (!c.members) return; const next = c.members.filter((x) => x.id !== m.id); onUpdate({ members: next, currentHp: next.reduce((sum, x) => sum + x.currentHp, 0), maxHp: next.reduce((sum, x) => sum + x.maxHp, 0) }); }}
+                      title="Remove from group"
+                    >🗑</button>
                   </div>
                   {mCondPickerOpen && (
                     <div style={{ ...s.condPicker, paddingTop: 6 }}>

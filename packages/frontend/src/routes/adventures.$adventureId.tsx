@@ -442,6 +442,7 @@ function AdventureDetailPage() {
             <EncounterCard
               key={e.id}
               encounter={e}
+              allEncounters={data.encounters}
               playlists={data.playlists}
               onDelete={() => setDeleteEncounterTarget(e)}
               onInvalidate={invalidate}
@@ -764,9 +765,10 @@ function SceneCard({
 // ── EncounterCard ─────────────────────────────────────────────────────────────
 
 function EncounterCard({
-  encounter, playlists, onDelete, onInvalidate,
+  encounter, allEncounters, playlists, onDelete, onInvalidate,
 }: {
   encounter: Encounter;
+  allEncounters: Encounter[];
   playlists: Playlist[];
   onDelete: () => void;
   onInvalidate: () => void;
@@ -905,7 +907,7 @@ function EncounterCard({
         </div>
       </div>
       {expanded && (
-        <CombatantManager encounter={encounter} onInvalidate={onInvalidate} />
+        <CombatantManager encounter={encounter} otherEncounters={allEncounters.filter((e) => e.id !== encounter.id)} onInvalidate={onInvalidate} />
       )}
     </div>
   );
@@ -913,9 +915,10 @@ function EncounterCard({
 
 // ── CombatantManager ──────────────────────────────────────────────────────────
 
-function CombatantManager({ encounter, onInvalidate }: { encounter: Encounter; onInvalidate: () => void }) {
+function CombatantManager({ encounter, otherEncounters, onInvalidate }: { encounter: Encounter; otherEncounters: { id: number; name: string }[]; onInvalidate: () => void }) {
   const [showForm, setShowForm] = useState(false);
   const [editingId, setEditingId] = useState<number | null>(null);
+  const [copyMenuId, setCopyMenuId] = useState<number | null>(null);
   const send = useBroadcastSender();
 
   const addCombatant = useMutation({
@@ -961,6 +964,29 @@ function CombatantManager({ encounter, onInvalidate }: { encounter: Encounter; o
       onInvalidate();
       send({ type: 'COMBATANT_REMOVED', payload: { encounterId: encounter.id, combatantId: id } });
     },
+  });
+
+  const copyCombatant = useMutation({
+    mutationFn: async ({ combatant, targetEncounterId }: { combatant: Combatant; targetEncounterId: number }) => {
+      const res = await fetch('/api/encounters/combatants', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          encounterId: targetEncounterId,
+          name: combatant.name,
+          maxHp: combatant.maxHp,
+          initiativeModifier: combatant.initiativeModifier,
+          type: combatant.type,
+          color: combatant.color,
+          description: combatant.description,
+          visibleToPlayers: combatant.visibleToPlayers,
+          statBlock: combatant.statBlock,
+          members: combatant.members?.map((m) => ({ label: m.label, maxHp: m.maxHp })),
+        }),
+      });
+      if (!res.ok) throw new Error('Failed to copy combatant');
+    },
+    onSuccess: () => onInvalidate(),
   });
 
   return (
@@ -1014,6 +1040,37 @@ function CombatantManager({ encounter, onInvalidate }: { encounter: Encounter; o
                 >+</button>
               )}
               <button style={s.btnIcon} onClick={() => setEditingId(c.id)} title="Edit">✎</button>
+              <div style={{ position: 'relative', display: 'inline-block' }}>
+                <button style={s.btnIcon} title="Copy combatant" onClick={() => setCopyMenuId(copyMenuId === c.id ? null : c.id)}>⧉</button>
+                {copyMenuId === c.id && (
+                  <div
+                    style={{ position: 'absolute', top: '100%', right: 0, zIndex: 100, background: '#1a1a2e', border: '1px solid #333', borderRadius: 6, minWidth: 190, boxShadow: '0 4px 16px rgba(0,0,0,0.5)', padding: '4px 0' }}
+                    onMouseLeave={() => setCopyMenuId(null)}
+                  >
+                    <button
+                      style={{ display: 'block', width: '100%', textAlign: 'left', padding: '6px 14px', background: 'none', border: 'none', color: '#e0e0e0', cursor: 'pointer', fontSize: '0.82rem' }}
+                      onMouseEnter={(e) => (e.currentTarget.style.background = '#2a2a4a')}
+                      onMouseLeave={(e) => (e.currentTarget.style.background = 'none')}
+                      onClick={() => { copyCombatant.mutate({ combatant: c, targetEncounterId: encounter.id }); setCopyMenuId(null); }}
+                    >📋 Copy to this encounter</button>
+                    {otherEncounters.length > 0 && (
+                      <>
+                        <div style={{ borderTop: '1px solid #333', margin: '4px 0' }} />
+                        {otherEncounters.map((e) => (
+                          <button
+                            key={e.id}
+                            style={{ display: 'block', width: '100%', textAlign: 'left', padding: '6px 14px', background: 'none', border: 'none', color: '#aaa', cursor: 'pointer', fontSize: '0.82rem', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}
+                            onMouseEnter={(ev) => (ev.currentTarget.style.background = '#2a2a4a')}
+                            onMouseLeave={(ev) => (ev.currentTarget.style.background = 'none')}
+                            onClick={() => { copyCombatant.mutate({ combatant: c, targetEncounterId: e.id }); setCopyMenuId(null); }}
+                            title={`Copy to: ${e.name}`}
+                          >↗ {e.name}</button>
+                        ))}
+                      </>
+                    )}
+                  </div>
+                )}
+              </div>
               <button style={{ ...s.btnIcon, color: '#ef5350' }} onClick={() => removeCombatant.mutate(c.id)} title="Remove combatant">🗑</button>
             </div>
             {c.type === 'group' && c.members && c.members.length > 0 && (
@@ -1022,6 +1079,14 @@ function CombatantManager({ encounter, onInvalidate }: { encounter: Encounter; o
                   <span key={m.id} style={s.memberChip}>
                     <MemberLabelChip memberId={m.id} label={m.label} onSaved={onInvalidate} />
                     <span style={{ opacity: 0.7 }}> HP {m.maxHp}</span>
+                    <button
+                      style={{ background: 'none', border: 'none', color: '#e05c5c', cursor: 'pointer', fontSize: '0.7rem', padding: '0 2px', lineHeight: 1 }}
+                      title="Remove member"
+                      onClick={async () => {
+                        await fetch(`/api/encounters/combatants/group-members/${m.id}`, { method: 'DELETE' });
+                        onInvalidate();
+                      }}
+                    >✕</button>
                   </span>
                 ))}
               </div>

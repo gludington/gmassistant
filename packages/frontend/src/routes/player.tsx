@@ -118,12 +118,14 @@ function PlayerScreen() {
 
   const sorted = [...combatants].sort((a, b) => (b.initiative ?? -999) - (a.initiative ?? -999));
 
-  // Estimate how many cards fit in one column, then derive column count.
+  // Start at 1 column; add columns only when cards would overflow vertically.
   const colCount = useMemo(() => {
-    const availableH = window.innerHeight - 90; // subtract round badge + top padding
-    const avgCardH = 130; // px — conservative estimate including gap
-    const perCol = Math.max(1, Math.floor(availableH / avgCardH));
-    return Math.max(1, Math.ceil(sorted.length / perCol));
+    const availableH = window.innerHeight - 90;
+    const avgCardH = 120;
+    for (let cols = 1; cols <= sorted.length; cols++) {
+      if (Math.ceil(sorted.length / cols) * avgCardH <= availableH) return cols;
+    }
+    return sorted.length;
   }, [sorted.length]);
 
   return (
@@ -155,7 +157,7 @@ function PlayerScreen() {
             </div>
           )}
 
-          <div style={{ ...s.cards, columnCount: colCount, height: '100%' }}>
+          <div style={{ ...s.cards, columnCount: colCount }}>
             {sorted.map((c, i) => (
               <CombatantCard key={c.id} combatant={c} rank={i} showHp={showHp} showInitiative={showInitiative} isActive={c.id === activeCombatantId} />
             ))}
