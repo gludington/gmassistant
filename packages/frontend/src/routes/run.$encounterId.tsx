@@ -1,6 +1,6 @@
 import { createFileRoute, Link, useNavigate } from '@tanstack/react-router';
 import { useQuery } from '@tanstack/react-query';
-import { useState, useEffect, useRef, useMemo } from 'react';
+import { useState, useEffect, useLayoutEffect, useRef, useMemo } from 'react';
 import type { LiveCombatant } from '@gmassisstant/types';
 import { useBroadcastSender, useBroadcastReceiver } from '../hooks/useBroadcast';
 import { CONDITIONS, conditionIcon } from '../conditions';
@@ -312,8 +312,10 @@ function EncounterRunner() {
     }
   }, [encounter, initialized, isFetching]);
 
-  // Persist live encounter state so it survives navigation away and back.
-  useEffect(() => {
+  // Persist live encounter state synchronously after each render (useLayoutEffect
+  // runs before paint, ensuring removeItem in endEncounter always wins the race
+  // against a deferred useEffect that would re-write the key).
+  useLayoutEffect(() => {
     if (!initialized) return;
     localStorage.setItem(runKey, JSON.stringify({
       combatants: combatants.map((c) => ({ ...c, editingHp: false, editingInit: false })),
@@ -409,14 +411,11 @@ function EncounterRunner() {
   function endEncounter() {
     if (!encounter) return;
     localStorage.removeItem(runKey);
-    if (showOnPlayer) {
-      send({ type: 'CLEAR_IMAGE' });
-      send({ type: 'TOGGLE_INITIATIVE', payload: { visible: false } });
-      try {
-        const raw = localStorage.getItem('gma:initiative');
-        if (raw) localStorage.setItem('gma:initiative', JSON.stringify({ ...JSON.parse(raw), visible: false }));
-      } catch {}
-    }
+    send({ type: 'TOGGLE_INITIATIVE', payload: { visible: false } });
+    try {
+      const raw = localStorage.getItem('gma:initiative');
+      if (raw) localStorage.setItem('gma:initiative', JSON.stringify({ ...JSON.parse(raw), visible: false }));
+    } catch {}
     navigate({ to: '/adventures/$adventureId', params: { adventureId: String(encounter.adventureId) } });
   }
 
@@ -677,11 +676,11 @@ function EncounterRunner() {
           <button style={s.navBtn} onClick={() => navigateActive(1)} title="Next combatant">▶</button>
         </div>
         <div style={s.headerActions}>
-          <button style={s.btnHdr} onClick={rollAll}>Roll All</button>
-          <button style={s.btnHdr} onClick={resetEncounter}>Reset Encounter</button>
-          <button style={s.btnHdrDanger} onClick={endEncounter}>End Encounter</button>
-          <button style={showAddForm ? s.btnHdrActive : s.btnHdr} onClick={() => setShowAddForm((v) => !v)}>
-            {showAddForm ? '✕ Cancel' : '+ Add Combatant'}
+          <button style={s.btnHdr} onClick={rollAll} title="Roll All Initiative">Init</button>
+          <button style={s.btnHdr} onClick={resetEncounter} title="Reset Encounter">Reset</button>
+          <button style={s.btnHdrDanger} onClick={endEncounter} title="End Encounter">End</button>
+          <button style={showAddForm ? s.btnHdrActive : s.btnHdr} onClick={() => setShowAddForm((v) => !v)} title={showAddForm ? 'Cancel' : 'Add Combatant'}>
+            {showAddForm ? '✕' : '+'}
           </button>
         </div>
       </GmHeader>

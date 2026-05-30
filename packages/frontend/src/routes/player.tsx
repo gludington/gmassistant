@@ -118,15 +118,23 @@ function PlayerScreen() {
 
   const sorted = [...combatants].sort((a, b) => (b.initiative ?? -999) - (a.initiative ?? -999));
 
-  // Start at 1 column; add columns only when cards would overflow vertically.
+  const [windowH, setWindowH] = useState(window.innerHeight);
+  useEffect(() => {
+    const onResize = () => setWindowH(window.innerHeight);
+    window.addEventListener('resize', onResize);
+    return () => window.removeEventListener('resize', onResize);
+  }, []);
+
+  // Add a column only when cards would overflow vertically.
+  // avgCardH is a compact estimate — basic card is ~90px incl. margin.
   const colCount = useMemo(() => {
-    const availableH = window.innerHeight - 90;
-    const avgCardH = 120;
+    const availableH = windowH - 70;
+    const avgCardH = 90;
     for (let cols = 1; cols <= sorted.length; cols++) {
       if (Math.ceil(sorted.length / cols) * avgCardH <= availableH) return cols;
     }
     return sorted.length;
-  }, [sorted.length]);
+  }, [sorted.length, windowH]);
 
   return (
     <div style={s.screen}>

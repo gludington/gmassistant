@@ -9,6 +9,7 @@ import { GmHeader, dropdownItem, dropdownItemActive } from '../components/GmHead
 import { StatBlockEditor } from '../components/StatBlockEditor';
 import { ImportModal } from '../components/ImportModal';
 import { useAudio, type Playlist, type PlaylistTrack } from '../hooks/useAudio';
+import { usePlayerScreen } from '../hooks/usePlayerScreen';
 import { DeleteConfirmModal } from '../components/DeleteConfirmModal';
 
 // ── Types ────────────────────────────────────────────────────────────────────
@@ -97,12 +98,17 @@ function AdventureDetailPage() {
   const qKey = ['adventure', adventureId];
   const send = useBroadcastSender();
   const { setAdventureId } = useCurrentAdventure();
-  const [playerImage, setPlayerImage] = useState<{ filePath: string; fit: SceneFit } | null>(null);
+  const { playerImage, showImage, clearImage } = usePlayerScreen();
 
   useEffect(() => {
     setAdventureId(Number(adventureId));
     return () => setAdventureId(null);
   }, [adventureId]);
+
+  // Restore player image if one was showing before we left for an encounter.
+  useEffect(() => {
+    if (playerImage) send({ type: 'SHOW_IMAGE', payload: { filePath: playerImage.filePath, fit: playerImage.fit } });
+  }, []);
 
   const { data, isLoading } = useQuery<AdventureDetail>({
     queryKey: qKey,
@@ -407,16 +413,8 @@ function AdventureDetailPage() {
               onRename={(name) => renameScene.mutate({ id: scene.id, name })}
               onDelete={() => setDeleteSceneTarget(scene)}
               onInvalidate={invalidate}
-              onSend={(filePath, fit) => {
-                send({ type: 'SHOW_IMAGE', payload: { filePath, fit } });
-                send({ type: 'TOGGLE_INITIATIVE', payload: { visible: false } });
-                setPlayerImage({ filePath, fit });
-                try {
-                  const raw = localStorage.getItem('gma:initiative');
-                  if (raw) localStorage.setItem('gma:initiative', JSON.stringify({ ...JSON.parse(raw), visible: false }));
-                } catch {}
-              }}
-              onClearPlayer={() => { send({ type: 'CLEAR_IMAGE' }); setPlayerImage(null); }}
+              onSend={(filePath, fit) => showImage(filePath, fit)}
+              onClearPlayer={() => clearImage()}
               playerImage={playerImage}
             />
           ))}
@@ -780,6 +778,7 @@ function EncounterCard({
   const [isActive, setIsActive] = useState(() => !!localStorage.getItem(`gma:run:${encounter.id}`));
   const { playPlaylist } = useAudio();
   const send = useBroadcastSender();
+  const { playerImage, showImage } = usePlayerScreen();
 
   const updateEncounter = useMutation({
     mutationFn: async (body: { name: string; description: string }) => {
@@ -812,12 +811,12 @@ function EncounterCard({
 
   function endEncounterFromHere() {
     localStorage.removeItem(`gma:run:${encounter.id}`);
-    send({ type: 'CLEAR_IMAGE' });
     send({ type: 'TOGGLE_INITIATIVE', payload: { visible: false } });
     try {
       const raw = localStorage.getItem('gma:initiative');
       if (raw) localStorage.setItem('gma:initiative', JSON.stringify({ ...JSON.parse(raw), visible: false }));
     } catch {}
+    if (playerImage) showImage(playerImage.filePath, playerImage.fit);
     setIsActive(false);
   }
 
