@@ -288,7 +288,8 @@ function HelpPage() {
             Scenes group atmospheric artwork by location or mood. Clicking
             <strong>▶ Show</strong> on an image pushes it to the Player Screen
             instantly. You can attach a playlist to an image so that it starts
-            automatically when the image is shown.
+            automatically when the image is shown. The active image's button
+            turns into <strong>■ Hide</strong> to let you clear the screen.
           </P>
           <Ul>
             <Li>
@@ -323,6 +324,10 @@ function HelpPage() {
             <strong>Fit</strong> shows the full image with letterboxing.
             <strong>Center</strong> displays the image at its natural
             resolution, centred.
+          </Tip>
+          <Tip>
+            <strong>Shift+click</strong> the Show or Hide button to crossfade
+            the image in or out over 0.6 seconds instead of cutting instantly.
           </Tip>
 
           <H3>Encounters</H3>

@@ -1,5 +1,5 @@
 import { createFileRoute } from '@tanstack/react-router';
-import { useState, useCallback, useEffect, useMemo } from 'react';
+import { useState, useCallback, useEffect, useMemo, useRef } from 'react';
 import type { BroadcastMessage, LiveCombatant, SceneFit } from '@gmassisstant/types';
 import { useBroadcastReceiver } from '../hooks/useBroadcast';
 import { conditionIcon } from '../conditions';
@@ -12,6 +12,17 @@ export const Route = createFileRoute('/player')({
 
 const GLOBAL_STYLES = `
   @import url('https://fonts.googleapis.com/css2?family=Cinzel:wght@700;900&family=Cinzel+Decorative:wght@900&display=swap');
+
+  @keyframes imgFadeIn {
+    from { opacity: 0; }
+    to   { opacity: 1; }
+  }
+  @keyframes imgFadeOut {
+    from { opacity: 1; }
+    to   { opacity: 0; }
+  }
+  .img-fade-in  { animation: imgFadeIn  0.6s ease forwards; }
+  .img-fade-out { animation: imgFadeOut 0.6s ease forwards; }
 
   @keyframes cardRise {
     from { opacity: 0; transform: translateY(-32px); }
@@ -44,8 +55,12 @@ const GLOBAL_STYLES = `
 // ── Component ─────────────────────────────────────────────────────────────────
 
 function PlayerScreen() {
-  const [image, setImage] = useState<string | null>(null);
-  const [imageFit, setImageFit] = useState<SceneFit>('fit');
+  type ImageSlot = { filePath: string; fit: SceneFit; key: number; fadeIn: boolean };
+  const [front, setFront] = useState<ImageSlot | null>(null);
+  const [back, setBack] = useState<Omit<ImageSlot, 'fadeIn'> | null>(null);
+  const imgKeyRef = useRef(0);
+  const frontRef = useRef<ImageSlot | null>(null);
+  frontRef.current = front;
   const [combatants, setCombatants] = useState<LiveCombatant[]>([]);
   const [initiativeVisible, setInitiativeVisible] = useState(false);
   const [showHp, setShowHp] = useState(false);
@@ -105,8 +120,32 @@ function PlayerScreen() {
 
   const handleMessage = useCallback((msg: BroadcastMessage) => {
     switch (msg.type) {
-      case 'SHOW_IMAGE':       setImage(msg.payload.filePath); setImageFit(msg.payload.fit); setInitiativeVisible(false); break;
-      case 'CLEAR_IMAGE':      setImage(null); break;
+      case 'SHOW_IMAGE': {
+        const { filePath, fit, transition = 'cut' } = msg.payload;
+        const key = ++imgKeyRef.current;
+        if (transition === 'fade') {
+          const cur = frontRef.current;
+          setBack(cur ? { filePath: cur.filePath, fit: cur.fit, key: cur.key } : null);
+          setFront({ filePath, fit, key, fadeIn: true });
+        } else {
+          setBack(null);
+          setFront({ filePath, fit, key, fadeIn: false });
+        }
+        setInitiativeVisible(false);
+        break;
+      }
+      case 'CLEAR_IMAGE': {
+        const transition = msg.payload?.transition ?? 'cut';
+        if (transition === 'fade') {
+          const cur = frontRef.current;
+          setBack(cur ? { filePath: cur.filePath, fit: cur.fit, key: cur.key } : null);
+          setFront(null);
+        } else {
+          setBack(null);
+          setFront(null);
+        }
+        break;
+      }
       case 'UPDATE_INITIATIVE': setCombatants(msg.payload.combatants); setActiveCombatantId(msg.payload.activeCombatantId ?? null); if (msg.payload.round !== undefined) setRound(msg.payload.round); break;
       case 'TOGGLE_INITIATIVE': setInitiativeVisible(msg.payload.visible); break;
       case 'SET_SHOW_HP': setShowHp(msg.payload.showHp); break;
@@ -146,8 +185,28 @@ function PlayerScreen() {
         </div>
       )}
 
-      {image ? (
-        <img src={image} alt="" style={imageFit === 'center' ? s.imageCenter : imageFit === 'cover' ? s.imageCover : s.imageFit} />
+      {(front || back) ? (
+        <div style={s.imageContainer}>
+          {front && (
+            <img
+              key={`front-${front.key}`}
+              src={front.filePath}
+              alt=""
+              className={front.fadeIn ? 'img-fade-in' : ''}
+              style={front.fit === 'cover' ? s.imageCoverLayer : front.fit === 'center' ? s.imageCenterLayer : s.imageFitLayer}
+            />
+          )}
+          {back && (
+            <img
+              key={`back-${back.key}`}
+              src={back.filePath}
+              alt=""
+              className="img-fade-out"
+              style={{ ...(back.fit === 'cover' ? s.imageCoverLayer : back.fit === 'center' ? s.imageCenterLayer : s.imageFitLayer), zIndex: 2 }}
+              onAnimationEnd={() => setBack(null)}
+            />
+          )}
+        </div>
       ) : (
         <div style={s.placeholder}>
           <span style={s.placeholderText}>⚔</span>
@@ -291,21 +350,36 @@ const s: Record<string, React.CSSProperties> = {
     position: 'relative',
     overflow: 'hidden',
   },
-  imageFit: {
+  imageContainer: {
+    position: 'absolute' as const,
+    inset: 0,
+  },
+  imageFitLayer: {
+    position: 'absolute' as const,
+    inset: 0,
     width: '100%',
     height: '100%',
-    objectFit: 'contain',
+    objectFit: 'contain' as const,
+    zIndex: 1,
   },
-  imageCover: {
+  imageCoverLayer: {
+    position: 'absolute' as const,
+    inset: 0,
     width: '100%',
     height: '100%',
-    objectFit: 'cover',
+    objectFit: 'cover' as const,
+    zIndex: 1,
   },
-  imageCenter: {
+  imageCenterLayer: {
+    position: 'absolute' as const,
+    top: '50%' as const,
+    left: '50%' as const,
+    transform: 'translate(-50%, -50%)',
     width: 'auto',
     height: 'auto',
     maxWidth: '100%',
     maxHeight: '100%',
+    zIndex: 1,
   },
   placeholder: {
     display: 'flex',

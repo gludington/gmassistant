@@ -88,8 +88,8 @@ export interface LiveCombatant {
 // ── BroadcastChannel message types ──────────────────────────────────────────
 
 export type BroadcastMessage =
-  | { type: 'SHOW_IMAGE'; payload: { filePath: string; fit: SceneFit } }
-  | { type: 'CLEAR_IMAGE' }
+  | { type: 'SHOW_IMAGE'; payload: { filePath: string; fit: SceneFit; transition?: 'fade' | 'cut' } }
+  | { type: 'CLEAR_IMAGE'; payload?: { transition?: 'fade' | 'cut' } }
   | { type: 'UPDATE_INITIATIVE'; payload: { combatants: LiveCombatant[]; activeCombatantId?: number | null; round?: number } }
   | { type: 'TOGGLE_INITIATIVE'; payload: { visible: boolean } }
   | { type: 'SET_SHOW_HP'; payload: { showHp: boolean } }

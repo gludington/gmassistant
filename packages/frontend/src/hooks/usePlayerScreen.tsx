@@ -6,8 +6,8 @@ interface PlayerImage { filePath: string; fit: SceneFit }
 
 interface PlayerScreenContextValue {
   playerImage: PlayerImage | null;
-  showImage: (filePath: string, fit: SceneFit) => void;
-  clearImage: () => void;
+  showImage: (filePath: string, fit: SceneFit, transition?: 'fade' | 'cut') => void;
+  clearImage: (transition?: 'fade' | 'cut') => void;
   updateFit: (filePath: string, fit: SceneFit) => void;
 }
 
@@ -17,9 +17,9 @@ export function PlayerScreenProvider({ children }: { children: ReactNode }) {
   const [playerImage, setPlayerImage] = useState<PlayerImage | null>(null);
   const send = useBroadcastSender();
 
-  const showImage = useCallback((filePath: string, fit: SceneFit) => {
+  const showImage = useCallback((filePath: string, fit: SceneFit, transition: 'fade' | 'cut' = 'cut') => {
     setPlayerImage({ filePath, fit });
-    send({ type: 'SHOW_IMAGE', payload: { filePath, fit } });
+    send({ type: 'SHOW_IMAGE', payload: { filePath, fit, transition } });
     send({ type: 'TOGGLE_INITIATIVE', payload: { visible: false } });
     try {
       const raw = localStorage.getItem('gma:initiative');
@@ -27,9 +27,9 @@ export function PlayerScreenProvider({ children }: { children: ReactNode }) {
     } catch {}
   }, [send]);
 
-  const clearImage = useCallback(() => {
+  const clearImage = useCallback((transition: 'fade' | 'cut' = 'cut') => {
     setPlayerImage(null);
-    send({ type: 'CLEAR_IMAGE' });
+    send({ type: 'CLEAR_IMAGE', payload: { transition } });
   }, [send]);
 
   // Update fit in context when the GM changes fit on a currently-showing image.

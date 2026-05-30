@@ -99,15 +99,27 @@ function AdventureDetailPage() {
   const send = useBroadcastSender();
   const { setAdventureId } = useCurrentAdventure();
   const { playerImage, showImage, clearImage } = usePlayerScreen();
+  const { playPlaylist } = useAudio();
 
   useEffect(() => {
     setAdventureId(Number(adventureId));
     return () => setAdventureId(null);
   }, [adventureId]);
 
-  // Restore player image if one was showing before we left for an encounter.
+  // Restore player image on mount. Only resume its playlist when returning from a
+  // completed encounter (no run key in localStorage) — clicking Back leaves the
+  // encounter active, so we leave audio alone in that case.
   useEffect(() => {
-    if (playerImage) send({ type: 'SHOW_IMAGE', payload: { filePath: playerImage.filePath, fit: playerImage.fit } });
+    if (!playerImage) return;
+    send({ type: 'SHOW_IMAGE', payload: { filePath: playerImage.filePath, fit: playerImage.fit } });
+    if (data) {
+      const hasActiveEncounter = data.encounters.some((e) => !!localStorage.getItem(`gma:run:${e.id}`));
+      if (!hasActiveEncounter) {
+        const img = data.imageScenes.flatMap((s) => s.images).find((i) => i.filePath === playerImage.filePath);
+        const pl = img?.playlistId ? data.playlists.find((p) => p.id === img.playlistId) : null;
+        if (pl && pl.tracks.length > 0) playPlaylist(pl);
+      }
+    }
   }, []);
 
   const { data, isLoading } = useQuery<AdventureDetail>({
@@ -413,8 +425,8 @@ function AdventureDetailPage() {
               onRename={(name) => renameScene.mutate({ id: scene.id, name })}
               onDelete={() => setDeleteSceneTarget(scene)}
               onInvalidate={invalidate}
-              onSend={(filePath, fit) => showImage(filePath, fit)}
-              onClearPlayer={() => clearImage()}
+              onSend={(filePath, fit, transition) => showImage(filePath, fit, transition)}
+              onClearPlayer={(transition) => clearImage(transition)}
               playerImage={playerImage}
             />
           ))}
@@ -442,6 +454,7 @@ function AdventureDetailPage() {
               encounter={e}
               allEncounters={data.encounters}
               playlists={data.playlists}
+              scenes={data.imageScenes}
               onDelete={() => setDeleteEncounterTarget(e)}
               onInvalidate={invalidate}
             />
@@ -491,8 +504,8 @@ function SceneCard({
   onRename: (name: string) => void;
   onDelete: () => void;
   onInvalidate: () => void;
-  onSend: (filePath: string, fit: SceneFit) => void;
-  onClearPlayer: () => void;
+  onSend: (filePath: string, fit: SceneFit, transition: 'fade' | 'cut') => void;
+  onClearPlayer: (transition: 'fade' | 'cut') => void;
   playerImage: { filePath: string; fit: SceneFit } | null;
 }) {
   const [expanded, setExpanded] = useState(false);
@@ -525,7 +538,7 @@ function SceneCard({
     onSuccess: ({ fit, filePath }) => {
       onInvalidate();
       if (playerImage?.filePath === filePath) {
-        onSend(filePath, fit);
+        onSend(filePath, fit, 'cut');
       }
     },
   });
@@ -671,7 +684,7 @@ function SceneCard({
             >
               {uploading ? 'Uploading...' : '+ Add Images'}
             </button>
-            <button style={s.btnSecondarySmall} onClick={onClearPlayer}>
+            <button style={s.btnSecondarySmall} onClick={() => onClearPlayer('cut')}>
               Clear Player Screen
             </button>
             <input
@@ -705,12 +718,13 @@ function SceneCard({
                   <div style={s.tileOverlay} className="tile-overlay">
                     <button
                       style={{ ...s.tileBtn, ...(playerImage?.filePath === img.filePath ? { background: '#c9a84c', color: '#1a1a2e' } : {}) }}
-                      title={playerImage?.filePath === img.filePath ? 'Hide from player screen' : 'Push to player screen'}
-                      onClick={() => {
+                      title={playerImage?.filePath === img.filePath ? 'Hide (shift+click to fade)' : 'Show (shift+click to fade)'}
+                      onClick={(e) => {
+                        const transition = e.shiftKey ? 'fade' : 'cut';
                         if (playerImage?.filePath === img.filePath) {
-                          onClearPlayer();
+                          onClearPlayer(transition);
                         } else {
-                          onSend(img.filePath, img.fit);
+                          onSend(img.filePath, img.fit, transition);
                           const imgPlaylist = playlists.find((p) => p.id === img.playlistId) ?? null;
                           if (imgPlaylist && imgPlaylist.tracks.length > 0) playPlaylist(imgPlaylist);
                         }
@@ -763,11 +777,12 @@ function SceneCard({
 // ── EncounterCard ─────────────────────────────────────────────────────────────
 
 function EncounterCard({
-  encounter, allEncounters, playlists, onDelete, onInvalidate,
+  encounter, allEncounters, playlists, scenes, onDelete, onInvalidate,
 }: {
   encounter: Encounter;
   allEncounters: Encounter[];
   playlists: Playlist[];
+  scenes: ImageScene[];
   onDelete: () => void;
   onInvalidate: () => void;
 }) {
@@ -816,7 +831,12 @@ function EncounterCard({
       const raw = localStorage.getItem('gma:initiative');
       if (raw) localStorage.setItem('gma:initiative', JSON.stringify({ ...JSON.parse(raw), visible: false }));
     } catch {}
-    if (playerImage) showImage(playerImage.filePath, playerImage.fit);
+    if (playerImage) {
+      showImage(playerImage.filePath, playerImage.fit);
+      const img = scenes.flatMap((s) => s.images).find((i) => i.filePath === playerImage.filePath);
+      const pl = img?.playlistId ? playlists.find((p) => p.id === img.playlistId) : null;
+      if (pl && pl.tracks.length > 0) playPlaylist(pl);
+    }
     setIsActive(false);
   }
 

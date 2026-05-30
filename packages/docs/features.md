@@ -34,6 +34,7 @@ Push atmospheric artwork to the Player Screen instantly.
 - Upload multiple images per scene (organised by location or mood)
 - **Fit modes** — Cover, Fit, and Center; changing mode on a live image updates the player screen without re-sending
 - **Playlist attachment** — associate a playlist with an image so it starts when you show the image
+- **Fade transitions** — shift+click Show or Hide to crossfade the image in or out (plain click cuts instantly)
 - Drag-to-reorder within a scene
 
 ## Player Screen
