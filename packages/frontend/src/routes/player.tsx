@@ -68,6 +68,10 @@ function PlayerScreen() {
   const [activeCombatantId, setActiveCombatantId] = useState<number | null>(null);
   const [round, setRound] = useState<number | null>(null);
   const [needsClick, setNeedsClick] = useState(false);
+  const [trackerScale, setTrackerScale] = useState<number>(() => {
+    const saved = localStorage.getItem('gma:player:trackerScale');
+    return saved ? Number(saved) : 1.0;
+  });
 
   useEffect(() => {
     const api = (window as { electronAPI?: { setFullScreen: (f: boolean) => void } }).electronAPI;
@@ -150,6 +154,10 @@ function PlayerScreen() {
       case 'TOGGLE_INITIATIVE': setInitiativeVisible(msg.payload.visible); break;
       case 'SET_SHOW_HP': setShowHp(msg.payload.showHp); break;
       case 'SET_SHOW_INITIATIVE': setShowInitiative(msg.payload.showInitiative); break;
+      case 'SET_TRACKER_SCALE':
+        localStorage.setItem('gma:player:trackerScale', String(msg.payload.scale));
+        setTrackerScale(msg.payload.scale);
+        break;
     }
   }, []);
 
@@ -165,15 +173,15 @@ function PlayerScreen() {
   }, []);
 
   // Add a column only when cards would overflow vertically.
-  // avgCardH is a compact estimate — basic card is ~90px incl. margin.
+  // avgCardH is a compact estimate — basic card is ~90px incl. margin, scaled by trackerScale.
   const colCount = useMemo(() => {
     const availableH = windowH - 70;
-    const avgCardH = 90;
+    const avgCardH = 90 * trackerScale;
     for (let cols = 1; cols <= sorted.length; cols++) {
       if (Math.ceil(sorted.length / cols) * avgCardH <= availableH) return cols;
     }
     return sorted.length;
-  }, [sorted.length, windowH]);
+  }, [sorted.length, windowH, trackerScale]);
 
   return (
     <div style={s.screen}>
@@ -214,7 +222,7 @@ function PlayerScreen() {
       )}
 
       {initiativeVisible && sorted.length > 0 && (
-        <div className="tracker-bar" style={s.trackerBar}>
+        <div className="tracker-bar" style={{ ...s.trackerBar, fontSize: `${trackerScale}rem` }}>
           <div style={s.trackerBackdrop} />
 
           {round !== null && (
@@ -415,14 +423,14 @@ const s: Record<string, React.CSSProperties> = {
     position: 'relative' as const,
     display: 'flex',
     alignItems: 'baseline',
-    gap: '0.5rem',
-    padding: '1rem 1.2rem 0.7rem',
+    gap: '0.5em',
+    padding: '1em 1.2em 0.7em',
     borderBottom: '1px solid rgba(201,168,76,0.2)',
     zIndex: 2,
   },
   roundWord: {
     fontFamily: "'Cinzel', serif",
-    fontSize: 'clamp(0.6rem, 0.9vw, 0.95rem)',
+    fontSize: '0.75em',
     letterSpacing: '0.2em',
     color: '#c9a84c',
     textTransform: 'uppercase' as const,
@@ -431,7 +439,7 @@ const s: Record<string, React.CSSProperties> = {
   },
   roundNum: {
     fontFamily: "'Cinzel Decorative', 'Cinzel', serif",
-    fontSize: 'clamp(1.4rem, 2.2vw, 2.8rem)',
+    fontSize: '2em',
     fontWeight: 900,
     color: '#c9a84c',
     lineHeight: 1,
@@ -458,9 +466,9 @@ const s: Record<string, React.CSSProperties> = {
   },
   cards: {
     position: 'relative',
-    columnGap: '0.6rem',
+    columnGap: '0.6em',
     columnFill: 'auto' as const,
-    padding: '0.8rem 1rem 2rem',
+    padding: '0.8em 1em 2em',
     flex: 1,
     minHeight: 0,
     overflow: 'hidden',
@@ -471,18 +479,18 @@ const s: Record<string, React.CSSProperties> = {
     breakInside: 'avoid' as const,
     display: 'flex',
     flexDirection: 'column' as const,
-    gap: '0.3rem',
+    gap: '0.3em',
     background: 'rgba(8, 6, 20, 0.92)',
     border: '1px solid rgba(255,255,255,0.07)',
-    borderLeft: '6px solid #c9a84c',
+    borderLeft: '0.35em solid #c9a84c',
     borderRadius: '3px',
-    padding: '0.8rem 1.1rem',
+    padding: '0.8em 1.1em',
     backdropFilter: 'blur(4px)',
-    marginBottom: '0.6rem',
+    marginBottom: '0.6em',
   },
   activeIndicator: {
     fontFamily: "'Cinzel', serif",
-    fontSize: '0.8rem',
+    fontSize: '0.75em',
     letterSpacing: '0.2em',
     color: '#c9a84c',
     fontWeight: 700,
@@ -491,23 +499,23 @@ const s: Record<string, React.CSSProperties> = {
   cardTopRow: {
     display: 'flex',
     alignItems: 'center',
-    gap: '0.8rem',
+    gap: '0.8em',
   },
   cardNameBlock: {
     flex: 1,
     minWidth: 0,
     display: 'flex',
     flexDirection: 'column' as const,
-    gap: '0.4rem',
+    gap: '0.4em',
   },
   nameRow: {
     display: 'flex',
     alignItems: 'center',
-    gap: '0.5rem',
+    gap: '0.5em',
   },
   initNum: {
     fontFamily: "'Cinzel Decorative', 'Cinzel', serif",
-    fontSize: 'clamp(2.8rem, 5vw, 6rem)',
+    fontSize: '4em',
     fontWeight: 900,
     lineHeight: 1,
     color: '#c9a84c',
@@ -518,7 +526,7 @@ const s: Record<string, React.CSSProperties> = {
   },
   name: {
     fontFamily: "'Cinzel', serif",
-    fontSize: 'clamp(1.5rem, 2.8vw, 3.2rem)',
+    fontSize: '2.5em',
     fontWeight: 900,
     lineHeight: 1.05,
     color: '#f5edd8',
@@ -528,11 +536,11 @@ const s: Record<string, React.CSSProperties> = {
   hpRow: {
     display: 'flex',
     alignItems: 'center',
-    gap: '0.6rem',
+    gap: '0.6em',
   },
   hp: {
     fontFamily: "'Cinzel', serif",
-    fontSize: 'clamp(1.1rem, 2vw, 2.2rem)',
+    fontSize: '1.8em',
     fontWeight: 700,
     lineHeight: 1,
     flexShrink: 0,
@@ -555,43 +563,43 @@ const s: Record<string, React.CSSProperties> = {
   memberGrid: {
     display: 'grid',
     gridAutoFlow: 'column' as const,
-    gap: '0.5rem',
+    gap: '0.5em',
     alignItems: 'start',
   },
   memberCell: {
     display: 'flex',
     flexDirection: 'column' as const,
     alignItems: 'center',
-    gap: '0.2rem',
-    minWidth: 64,
+    gap: '0.2em',
+    minWidth: '5.5em',
   },
   memberNameRow: {
     display: 'flex',
     alignItems: 'center',
-    gap: '0.3rem',
+    gap: '0.3em',
   },
   memberConditions: {
     display: 'flex',
-    gap: '0.15rem',
+    gap: '0.15em',
     flexWrap: 'wrap' as const,
   },
   memberLabel: {
     fontFamily: "'Cinzel', serif",
-    fontSize: 'clamp(0.75rem, 1.2vw, 1.3rem)',
+    fontSize: '1.4em',
     fontWeight: 700,
     color: '#f5edd8',
     letterSpacing: '0.04em',
   },
   memberHp: {
     fontFamily: "'Cinzel', serif",
-    fontSize: 'clamp(0.7rem, 1.1vw, 1.2rem)',
+    fontSize: '1.2em',
     fontWeight: 600,
   },
   conditions: {
     display: 'flex',
     flexDirection: 'row' as const,
     flexWrap: 'nowrap' as const,
-    gap: '0.3rem',
+    gap: '0.3em',
     alignItems: 'center',
     flexShrink: 0,
   },
@@ -599,11 +607,11 @@ const s: Record<string, React.CSSProperties> = {
     background: 'rgba(255,255,255,0.06)',
     border: '1px solid rgba(255,255,255,0.15)',
     borderRadius: '4px',
-    padding: '0.1rem 0.25rem',
+    padding: '0.1em 0.25em',
     lineHeight: 1,
   },
   condEmoji: {
-    fontSize: 'clamp(1.4rem, 2.4vw, 2.8rem)',
+    fontSize: '2em',
     lineHeight: 1,
   },
 };

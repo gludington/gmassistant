@@ -194,6 +194,10 @@ function EncounterRunner() {
   });
   const [showHp, setShowHp] = useState(false);
   const [showInitiative, setShowInitiative] = useState(false);
+  const [trackerScale, setTrackerScale] = useState<number>(() => {
+    const saved = localStorage.getItem('gma:player:trackerScale');
+    return saved ? Number(saved) : 1.0;
+  });
   const [initialized, setInitialized] = useState(false);
   const [showAddForm, setShowAddForm] = useState(false);
   const [activeCombatantId, setActiveCombatantId] = useState<number | null>(null);
@@ -361,6 +365,13 @@ function EncounterRunner() {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ showInitiative: next }),
     });
+  }
+
+  function changeTrackerScale(delta: number) {
+    const next = Math.round(Math.min(2.0, Math.max(0.5, trackerScale + delta)) * 10) / 10;
+    localStorage.setItem('gma:player:trackerScale', String(next));
+    setTrackerScale(next);
+    send({ type: 'SET_TRACKER_SCALE', payload: { scale: next } });
   }
 
   function togglePlayer() {
@@ -654,6 +665,12 @@ function EncounterRunner() {
             <button style={showHp ? dropdownItemActive : dropdownItem} onClick={toggleShowHp}>
               {showHp ? '✔ HP visible' : '✗ HP hidden'}
             </button>
+            <div style={scaleRow}>
+              <span style={scaleLabel}>Text scale</span>
+              <button style={scaleBtn} onClick={() => changeTrackerScale(-0.1)} disabled={trackerScale <= 0.5}>−</button>
+              <span style={scaleValue}>{trackerScale.toFixed(1)}×</span>
+              <button style={scaleBtn} onClick={() => changeTrackerScale(0.1)} disabled={trackerScale >= 2.0}>+</button>
+            </div>
           </>
         }
       >
@@ -1727,6 +1744,18 @@ function StatBlockPanel({ combatant, onClose, onEditStatBlock }: { combatant: Ru
     </div>
   );
 }
+
+const scaleRow: React.CSSProperties = {
+  display: 'flex', alignItems: 'center', gap: 6,
+  padding: '6px 12px', borderTop: '1px solid #333',
+};
+const scaleLabel: React.CSSProperties = { fontSize: '0.8rem', color: '#999', flex: 1 };
+const scaleBtn: React.CSSProperties = {
+  background: '#2a2a2a', border: '1px solid #444', borderRadius: 3,
+  color: '#ccc', cursor: 'pointer', fontSize: '1rem', lineHeight: 1,
+  padding: '2px 8px', minWidth: 28,
+};
+const scaleValue: React.CSSProperties = { fontSize: '0.85rem', color: '#c9a84c', minWidth: 36, textAlign: 'center' };
 
 const sbOverlay: React.CSSProperties = {
   position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.6)', zIndex: 1000,
