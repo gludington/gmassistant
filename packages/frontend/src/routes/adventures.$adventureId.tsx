@@ -938,6 +938,7 @@ function CombatantManager({ encounter, otherEncounters, onInvalidate }: { encoun
   const [showForm, setShowForm] = useState(false);
   const [editingId, setEditingId] = useState<number | null>(null);
   const [copyMenuId, setCopyMenuId] = useState<number | null>(null);
+  const [statBlockEditId, setStatBlockEditId] = useState<number | null>(null);
   const send = useBroadcastSender();
 
   const addCombatant = useMutation({
@@ -1058,6 +1059,13 @@ function CombatantManager({ encounter, otherEncounters, onInvalidate }: { encoun
                   }}
                 >+</button>
               )}
+              {c.type !== 'event' && c.type !== 'lair' && c.type !== 'pc' && (
+                <button
+                  style={{ ...s.btnIcon, color: c.statBlock ? '#c9a84c' : '#555' }}
+                  onClick={() => setStatBlockEditId(statBlockEditId === c.id ? null : c.id)}
+                  title={c.statBlock ? 'Edit stat block' : 'Add stat block'}
+                >📖</button>
+              )}
               <button style={s.btnIcon} onClick={() => setEditingId(c.id)} title="Edit">✎</button>
               <div style={{ position: 'relative', display: 'inline-block' }}>
                 <button style={s.btnIcon} title="Copy combatant" onClick={() => setCopyMenuId(copyMenuId === c.id ? null : c.id)}>⧉</button>
@@ -1092,6 +1100,16 @@ function CombatantManager({ encounter, otherEncounters, onInvalidate }: { encoun
               </div>
               <button style={{ ...s.btnIcon, color: '#ef5350' }} onClick={() => removeCombatant.mutate(c.id)} title="Remove combatant">🗑</button>
             </div>
+            {statBlockEditId === c.id && (
+              <StatBlockEditor
+                initialData={c.statBlock ?? undefined}
+                onSave={(json) => {
+                  updateCombatant.mutate({ id: c.id, name: c.name, maxHp: c.maxHp, initiativeModifier: c.initiativeModifier, type: c.type, color: c.color ?? '#888888', description: c.description, visibleToPlayers: c.visibleToPlayers, statBlock: json, ...(c.type === 'group' && c.members ? { members: c.members.map((m) => ({ label: m.label, maxHp: m.maxHp })) } : {}) });
+                  setStatBlockEditId(null);
+                }}
+                onCancel={() => setStatBlockEditId(null)}
+              />
+            )}
             {c.type === 'group' && c.members && c.members.length > 0 && (
               <div style={{ paddingLeft: 18, display: 'flex', flexWrap: 'wrap', gap: 4, marginTop: 2 }}>
                 {c.members.map((m) => (
