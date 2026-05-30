@@ -80,16 +80,24 @@ function extractYouTubeId(url: string): string | null {
   return m ? m[1] : null;
 }
 
-function buildPlayOrder(trackCount: number, mode: PlayMode, startIndex: number): { order: number[]; pos: number } {
+function buildPlayOrder(trackCount: number, mode: PlayMode, startIndex: number, pinStart = false): { order: number[]; pos: number } {
   if (mode === 'sequential') {
     return { order: Array.from({ length: trackCount }, (_, i) => i), pos: startIndex };
   }
-  const rest = Array.from({ length: trackCount }, (_, i) => i).filter(i => i !== startIndex);
-  for (let i = rest.length - 1; i > 0; i--) {
-    const j = Math.floor(Math.random() * (i + 1));
-    [rest[i], rest[j]] = [rest[j], rest[i]];
+  const all = Array.from({ length: trackCount }, (_, i) => i);
+  if (pinStart) {
+    const rest = all.filter((i) => i !== startIndex);
+    for (let i = rest.length - 1; i > 0; i--) {
+      const j = Math.floor(Math.random() * (i + 1));
+      [rest[i], rest[j]] = [rest[j], rest[i]];
+    }
+    return { order: [startIndex, ...rest], pos: 0 };
   }
-  return { order: [startIndex, ...rest], pos: 0 };
+  for (let i = all.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [all[i], all[j]] = [all[j], all[i]];
+  }
+  return { order: all, pos: 0 };
 }
 
 export function AudioProvider({ children }: { children: ReactNode }) {
@@ -345,7 +353,7 @@ export function AudioProvider({ children }: { children: ReactNode }) {
     localStorage.setItem('gma:audio:playMode', mode);
     const { currentPlaylist, currentTrackIndex } = stateRef.current;
     if (currentPlaylist) {
-      const { order, pos } = buildPlayOrder(currentPlaylist.tracks.length, mode, currentTrackIndex);
+      const { order, pos } = buildPlayOrder(currentPlaylist.tracks.length, mode, currentTrackIndex, true);
       playOrderRef.current = order;
       playPosRef.current = pos;
     }
