@@ -707,7 +707,7 @@ function EncounterRunner() {
               onUpdateBase={(values) => updateCombatantBase(c.id, values)}
               onToggleVisible={() => toggleVisibility(c.id)}
               onSetActive={() => activateCombatant(c.id)}
-              onShowStatBlock={c.statBlock ? () => setStatBlockCombatant(c) : undefined}
+              onShowStatBlock={!c.isAdventurePlayer ? () => setStatBlockCombatant(c) : undefined}
               onCopy={(targetEncounterId) => copyCombatant(c, targetEncounterId)}
               otherEncounters={otherEncounters}
             />
