@@ -61,7 +61,7 @@ interface CombatantItem {
 
 interface EncounterItem {
   name: string; description: string | null;
-  playlistLocalId: number | null; combatants: CombatantItem[];
+  sortOrder: number; playlistLocalId: number | null; combatants: CombatantItem[];
 }
 
 interface ImageItem {
@@ -166,7 +166,7 @@ export async function exportAdventure(db: AppDb, storage: StorageAdapter, advent
   const sessionRows = await db.select().from(sessionsTable).where(eq(sessionsTable.adventureId, adventureId));
   const playlistRows = await db.select().from(playlistsTable).where(eq(playlistsTable.adventureId, adventureId)).orderBy(playlistsTable.sortOrder);
   const sceneRows = await db.select().from(imageScenesTable).where(eq(imageScenesTable.adventureId, adventureId)).orderBy(imageScenesTable.sortOrder);
-  const encounterRows = await db.select().from(encountersTable).where(eq(encountersTable.adventureId, adventureId));
+  const encounterRows = await db.select().from(encountersTable).where(eq(encountersTable.adventureId, adventureId)).orderBy(encountersTable.sortOrder);
 
   const playlistIds = playlistRows.map((p) => p.id);
   const trackRows = playlistIds.length > 0
@@ -233,6 +233,7 @@ export async function exportAdventure(db: AppDb, storage: StorageAdapter, advent
     encounters: encounterRows.map((enc) => ({
       name: enc.name,
       description: enc.description,
+      sortOrder: enc.sortOrder,
       playlistLocalId: enc.playlistId,
       combatants: combatantRows
         .filter((c) => c.encounterId === enc.id)
@@ -425,6 +426,7 @@ async function applyAdventureImport(
   for (const enc of d.encounters) {
     const [newEnc] = await db.insert(encountersTable).values({
       adventureId: newAdventure.id, name: enc.name, description: enc.description,
+      sortOrder: enc.sortOrder ?? 0,
       playlistId: enc.playlistLocalId !== null ? (playlistIdMap.get(enc.playlistLocalId) ?? null) : null,
     }).returning();
     await importCombatants(db, newEnc.id, enc.combatants);
@@ -477,7 +479,8 @@ async function applyEncounterImport(
   }
   if (res?.action === 'rename') name = res.newName ?? `${name} (imported)`;
 
-  const [newEnc] = await db.insert(encountersTable).values({ adventureId, name, description: d.encounter.description }).returning();
+  const existing = await db.select({ id: encountersTable.id }).from(encountersTable).where(eq(encountersTable.adventureId, adventureId));
+  const [newEnc] = await db.insert(encountersTable).values({ adventureId, name, description: d.encounter.description, sortOrder: existing.length }).returning();
   await importCombatants(db, newEnc.id, d.combatants);
   return newEnc.id;
 }

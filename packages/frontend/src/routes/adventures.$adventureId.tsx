@@ -32,6 +32,7 @@ interface Encounter {
   name: string;
   description: string | null;
   playlistId: number | null;
+  sortOrder: number;
   combatants: Combatant[];
 }
 
@@ -250,6 +251,64 @@ function AdventureDetailPage() {
   const [deleteSceneTarget, setDeleteSceneTarget] = useState<ImageScene | null>(null);
   const [deleteEncounterTarget, setDeleteEncounterTarget] = useState<Encounter | null>(null);
 
+  const [localEncounters, setLocalEncounters] = useState<Encounter[]>([]);
+  const [draggingEncounterId, setDraggingEncounterId] = useState<number | null>(null);
+  const encounterDragDroppedRef = useRef(false);
+  const encounterLastOverRef = useRef<number | null>(null);
+
+  useEffect(() => {
+    if (draggingEncounterId === null && data)
+      setLocalEncounters([...data.encounters].sort((a, b) => (a.sortOrder ?? 0) - (b.sortOrder ?? 0)));
+  }, [data?.encounters]);
+
+  const reorderEncounters = useMutation({
+    mutationFn: async (ordered: Encounter[]) => {
+      await Promise.all(
+        ordered.map((enc, i) =>
+          fetch(`/api/encounters/${enc.id}`, {
+            method: 'PATCH',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ sortOrder: i }),
+          })
+        )
+      );
+    },
+    onSuccess: invalidate,
+  });
+
+  function handleEncounterDragStart(id: number) {
+    encounterDragDroppedRef.current = false;
+    encounterLastOverRef.current = null;
+    setDraggingEncounterId(id);
+  }
+
+  function handleEncounterDragOver(e: React.DragEvent, id: number) {
+    e.preventDefault();
+    if (draggingEncounterId === null || draggingEncounterId === id || encounterLastOverRef.current === id) return;
+    encounterLastOverRef.current = id;
+    setLocalEncounters(prev => {
+      const from = prev.findIndex(t => t.id === draggingEncounterId);
+      const to = prev.findIndex(t => t.id === id);
+      if (from === -1 || to === -1 || from === to) return prev;
+      const next = [...prev];
+      next.splice(to, 0, next.splice(from, 1)[0]);
+      return next;
+    });
+  }
+
+  function handleEncounterDrop() {
+    encounterDragDroppedRef.current = true;
+    setDraggingEncounterId(null);
+    reorderEncounters.mutate(localEncounters);
+  }
+
+  function handleEncounterDragEnd() {
+    if (!encounterDragDroppedRef.current && data)
+      setLocalEncounters([...data.encounters].sort((a, b) => (a.sortOrder ?? 0) - (b.sortOrder ?? 0)));
+    encounterDragDroppedRef.current = false;
+    setDraggingEncounterId(null);
+  }
+
   const updateAdventure = useMutation({
     mutationFn: async (body: { name: string; description: string }) => {
       const res = await fetch(`/api/adventures/${adventureId}`, {
@@ -448,16 +507,25 @@ function AdventureDetailPage() {
             />
           )}
         >
-          {data.encounters.map((e) => (
-            <EncounterCard
+          {localEncounters.map((e) => (
+            <div
               key={e.id}
-              encounter={e}
-              allEncounters={data.encounters}
-              playlists={data.playlists}
-              scenes={data.imageScenes}
-              onDelete={() => setDeleteEncounterTarget(e)}
-              onInvalidate={invalidate}
-            />
+              style={{ opacity: e.id === draggingEncounterId ? 0.35 : 1, transition: 'opacity 0.1s' }}
+              draggable
+              onDragStart={() => handleEncounterDragStart(e.id)}
+              onDragOver={(ev) => handleEncounterDragOver(ev, e.id)}
+              onDrop={handleEncounterDrop}
+              onDragEnd={handleEncounterDragEnd}
+            >
+              <EncounterCard
+                encounter={e}
+                allEncounters={data.encounters}
+                playlists={data.playlists}
+                scenes={data.imageScenes}
+                onDelete={() => setDeleteEncounterTarget(e)}
+                onInvalidate={invalidate}
+              />
+            </div>
           ))}
         </Section>
       </main>
@@ -845,6 +913,7 @@ function EncounterCard({
   return (
     <div style={{ ...s.sceneWrapper, ...(isActive ? { borderLeft: '3px solid #4caf50', paddingLeft: 8 } : {}) }}>
       <div style={s.card}>
+        <span style={s.encounterDragHandle} title="Drag to reorder">⠿</span>
         <div style={s.cardBody}>
           {editing ? (
             <form
@@ -1665,5 +1734,9 @@ const s: Record<string, React.CSSProperties> = {
   memberChip: {
     fontSize: '0.75rem', padding: '2px 8px', borderRadius: 10,
     background: '#2a1a3a', color: '#ce93d8', border: '1px solid #4a2a5a',
+  },
+  encounterDragHandle: {
+    color: 'rgba(255,255,255,0.25)', fontSize: '1rem', cursor: 'grab',
+    userSelect: 'none', flexShrink: 0, padding: '0 6px 0 0',
   },
 };

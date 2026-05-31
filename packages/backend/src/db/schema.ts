@@ -60,6 +60,7 @@ export const encounters = sqliteTable('encounters', {
   name: text('name').notNull(),
   description: text('description'),
   playlistId: integer('playlist_id').references(() => playlists.id, { onDelete: 'set null' }),
+  sortOrder: integer('sort_order').notNull().default(0),
 });
 
 export const combatants = sqliteTable('combatants', {

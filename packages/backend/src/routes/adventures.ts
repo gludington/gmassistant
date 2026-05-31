@@ -27,7 +27,7 @@ router.get('/:id', async (c) => {
     }))
   );
 
-  const encounterList = await db.select().from(encounters).where(eq(encounters.adventureId, id));
+  const encounterList = await db.select().from(encounters).where(eq(encounters.adventureId, id)).orderBy(encounters.sortOrder);
   const encountersWithCombatants = await Promise.all(
     encounterList.map(async (encounter) => {
       const combatantList = await db.select().from(combatants).where(eq(combatants.encounterId, encounter.id));

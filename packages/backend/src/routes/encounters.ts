@@ -61,10 +61,12 @@ const encounterSchema = z.object({
 router.post('/', zValidator('json', encounterSchema), async (c) => {
   const db = c.var.db;
   const data = c.req.valid('json');
+  const existing = await db.select({ id: encounters.id }).from(encounters).where(eq(encounters.adventureId, data.adventureId));
   const [created] = await db.insert(encounters).values({
     adventureId: data.adventureId,
     name: data.name,
     description: data.description ?? null,
+    sortOrder: existing.length,
   }).returning();
   return c.json(created, 201);
 });
@@ -81,11 +83,17 @@ router.put('/:id', zValidator('json', encounterSchema.partial().omit({ adventure
   return c.json(updated);
 });
 
-router.patch('/:id', zValidator('json', z.object({ playlistId: z.number().int().nullable() })), async (c) => {
+router.patch('/:id', zValidator('json', z.object({
+  playlistId: z.number().int().nullable().optional(),
+  sortOrder: z.number().int().optional(),
+})), async (c) => {
   const db = c.var.db;
   const id = Number(c.req.param('id'));
-  const { playlistId } = c.req.valid('json');
-  const [updated] = await db.update(encounters).set({ playlistId }).where(eq(encounters.id, id)).returning();
+  const data = c.req.valid('json');
+  const updates: Record<string, unknown> = {};
+  if (data.playlistId !== undefined) updates.playlistId = data.playlistId;
+  if (data.sortOrder !== undefined) updates.sortOrder = data.sortOrder;
+  const [updated] = await db.update(encounters).set(updates).where(eq(encounters.id, id)).returning();
   if (!updated) return c.json({ error: 'Not found' }, 404);
   return c.json(updated);
 });

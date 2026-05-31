@@ -14,6 +14,7 @@ CREATE TABLE `playlists` (
 	`name` text NOT NULL,
 	`sort_order` integer DEFAULT 0 NOT NULL,
 	`play_mode` text DEFAULT 'sequential' NOT NULL,
+	`loop` integer DEFAULT 0 NOT NULL,
 	FOREIGN KEY (`adventure_id`) REFERENCES `adventures`(`id`) ON UPDATE no action ON DELETE cascade
 );
 --> statement-breakpoint
@@ -52,6 +53,7 @@ CREATE TABLE `encounters` (
 	`name` text NOT NULL,
 	`description` text,
 	`playlist_id` integer,
+	`sort_order` integer DEFAULT 0 NOT NULL,
 	FOREIGN KEY (`adventure_id`) REFERENCES `adventures`(`id`) ON UPDATE no action ON DELETE cascade,
 	FOREIGN KEY (`playlist_id`) REFERENCES `playlists`(`id`) ON UPDATE no action ON DELETE set null
 );
