@@ -158,7 +158,7 @@ router.put('/combatants/:id', zValidator('json', combatantSchema.partial().omit(
   const data = c.req.valid('json');
   const { members, ...fields } = data;
   const [updated] = await db.update(combatants)
-    .set({ ...fields, color: fields.color ?? null, description: fields.description ?? null, visibleToPlayers: fields.visibleToPlayers ?? true, statBlock: fields.statBlock ?? null })
+    .set({ ...fields, color: fields.color ?? null, description: fields.description ?? null, visibleToPlayers: fields.visibleToPlayers ?? true })
     .where(eq(combatants.id, id))
     .returning();
   if (!updated) return c.json({ error: 'Not found' }, 404);

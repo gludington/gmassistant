@@ -1111,7 +1111,7 @@ function CombatantManager({ encounter, otherEncounters, onInvalidate }: { encoun
               <button
                 style={{ ...s.btnIcon, color: c.visibleToPlayers ? '#4caf50' : '#555' }}
                 title={c.visibleToPlayers ? 'Visible to players (click to hide)' : 'Hidden from players (click to show)'}
-                onClick={() => updateCombatant.mutate({ id: c.id, name: c.name, maxHp: c.maxHp, initiativeModifier: c.initiativeModifier, type: c.type, color: c.color ?? '#888888', description: c.description, visibleToPlayers: !c.visibleToPlayers })}
+                onClick={() => updateCombatant.mutate({ id: c.id, name: c.name, maxHp: c.maxHp, initiativeModifier: c.initiativeModifier, type: c.type, color: c.color ?? defaultColor(c.type), description: c.description, visibleToPlayers: !c.visibleToPlayers, statBlock: c.statBlock ?? undefined, ...(c.type === 'group' && c.members ? { members: c.members.map((m) => ({ label: m.label, maxHp: m.maxHp })) } : {}) })}
               >👁</button>
               {(c.type === 'enemy' || c.type === 'group') && (
                 <button
@@ -1119,11 +1119,11 @@ function CombatantManager({ encounter, otherEncounters, onInvalidate }: { encoun
                   title={c.type === 'enemy' ? 'Convert to group with 2 members' : 'Add another member'}
                   onClick={() => {
                     if (c.type === 'enemy') {
-                      updateCombatant.mutate({ id: c.id, name: c.name, maxHp: c.maxHp, initiativeModifier: c.initiativeModifier, type: 'group', color: c.color ?? '#888888', description: c.description, visibleToPlayers: c.visibleToPlayers, members: [{ label: `${c.name} (1)`, maxHp: c.maxHp }, { label: `${c.name} (2)`, maxHp: c.maxHp }] });
+                      updateCombatant.mutate({ id: c.id, name: c.name, maxHp: c.maxHp, initiativeModifier: c.initiativeModifier, type: 'group', color: c.color ?? defaultColor(c.type), description: c.description, visibleToPlayers: c.visibleToPlayers, statBlock: c.statBlock ?? undefined, members: [{ label: `${c.name} (1)`, maxHp: c.maxHp }, { label: `${c.name} (2)`, maxHp: c.maxHp }] });
                     } else {
                       const existing = c.members ?? [];
                       const lastHp = existing.length > 0 ? existing[existing.length - 1].maxHp : 10;
-                      updateCombatant.mutate({ id: c.id, name: c.name, maxHp: c.maxHp, initiativeModifier: c.initiativeModifier, type: 'group', color: c.color ?? '#888888', description: c.description, visibleToPlayers: c.visibleToPlayers, members: [...existing.map(m => ({ label: m.label, maxHp: m.maxHp })), { label: `${c.name} (${existing.length + 1})`, maxHp: lastHp }] });
+                      updateCombatant.mutate({ id: c.id, name: c.name, maxHp: c.maxHp, initiativeModifier: c.initiativeModifier, type: 'group', color: c.color ?? defaultColor(c.type), description: c.description, visibleToPlayers: c.visibleToPlayers, statBlock: c.statBlock ?? undefined, members: [...existing.map(m => ({ label: m.label, maxHp: m.maxHp })), { label: `${c.name} (${existing.length + 1})`, maxHp: lastHp }] });
                     }
                   }}
                 >+</button>
@@ -1173,7 +1173,7 @@ function CombatantManager({ encounter, otherEncounters, onInvalidate }: { encoun
               <StatBlockEditor
                 initialData={c.statBlock ?? undefined}
                 onSave={(json) => {
-                  updateCombatant.mutate({ id: c.id, name: c.name, maxHp: c.maxHp, initiativeModifier: c.initiativeModifier, type: c.type, color: c.color ?? '#888888', description: c.description, visibleToPlayers: c.visibleToPlayers, statBlock: json, ...(c.type === 'group' && c.members ? { members: c.members.map((m) => ({ label: m.label, maxHp: m.maxHp })) } : {}) });
+                  updateCombatant.mutate({ id: c.id, name: c.name, maxHp: c.maxHp, initiativeModifier: c.initiativeModifier, type: c.type, color: c.color ?? defaultColor(c.type), description: c.description, visibleToPlayers: c.visibleToPlayers, statBlock: json, ...(c.type === 'group' && c.members ? { members: c.members.map((m) => ({ label: m.label, maxHp: m.maxHp })) } : {}) });
                   setStatBlockEditId(null);
                 }}
                 onCancel={() => setStatBlockEditId(null)}
@@ -1261,6 +1261,12 @@ function MemberLabelChip({ memberId, label, onSaved }: { memberId: number; label
   );
 }
 
+function defaultColor(type: string): string {
+  if (type === 'pc') return '#4caf50';
+  if (type === 'enemy' || type === 'group') return '#ef5350';
+  return '#888888';
+}
+
 // ── CombatantForm ─────────────────────────────────────────────────────────────
 
 function CombatantForm({
@@ -1275,7 +1281,7 @@ function CombatantForm({
   const [maxHp, setMaxHp] = useState(initialValues?.maxHp ?? 10);
   const [initMod, setInitMod] = useState(initialValues?.initiativeModifier ?? 0);
   const [type, setType] = useState<Combatant['type']>(initialValues?.type ?? 'enemy');
-  const [color, setColor] = useState(initialValues?.color ?? '#888888');
+  const [color, setColor] = useState(initialValues?.color ?? defaultColor(initialValues?.type ?? 'enemy'));
   const [description, setDescription] = useState(initialValues?.description ?? '');
   const [visibleToPlayers, setVisibleToPlayers] = useState(
     initialValues?.visibleToPlayers ?? (initialValues?.type === 'event' || initialValues?.type === 'lair' ? false : true)
@@ -1330,7 +1336,7 @@ function CombatantForm({
         </label>
       </div>
       <div style={s.formRow}>
-        <select style={s.input} value={type} onChange={(e) => setType(e.target.value as Combatant['type'])}>
+        <select style={s.input} value={type} onChange={(e) => { const t = e.target.value as Combatant['type']; setType(t); setColor(defaultColor(t)); }}>
           <option value="enemy">Enemy</option>
           <option value="npc">NPC</option>
           <option value="pc">PC</option>

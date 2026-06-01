@@ -89,6 +89,7 @@ function toRunCombatant(c: BaseCombatant): RunCombatant {
       isAdventurePlayer: false,
       visibleToPlayers: c.visibleToPlayers ?? true,
       description: c.description ?? null,
+      statBlock: c.statBlock ?? null,
       editingHp: false,
       editingInit: false,
       members,
@@ -526,6 +527,7 @@ function EncounterRunner() {
         description: values.description,
         editingHp: false,
         editingInit: false,
+        statBlock: values.statBlock ?? null,
         members,
       };
     } else {
@@ -559,7 +561,7 @@ function EncounterRunner() {
       maxHp: c.maxHp,
       initiativeModifier: c.initiativeModifier,
       type: c.type,
-      color: c.color ?? '#888888',
+      color: c.color ?? defaultColor(c.type),
       description: c.description,
       visibleToPlayers: c.visibleToPlayers,
       statBlock: c.statBlock ?? undefined,
@@ -602,7 +604,7 @@ function EncounterRunner() {
       await fetch(`/api/encounters/combatants/${id}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ name: c.name, maxHp: c.maxHp, initiativeModifier: c.initiativeModifier, type: c.type, color: c.color ?? '#888888', description: c.description, visibleToPlayers: !c.visibleToPlayers }),
+        body: JSON.stringify({ name: c.name, maxHp: c.maxHp, initiativeModifier: c.initiativeModifier, type: c.type, color: c.color ?? defaultColor(c.type), description: c.description, visibleToPlayers: !c.visibleToPlayers, statBlock: c.statBlock ?? undefined }),
       });
     }
   }
@@ -1180,7 +1182,7 @@ function CombatantRow({
     </div>
     {editingBase && (
       <AddCombatantForm
-        initialValues={{ name: c.name, maxHp: c.maxHp, initiativeModifier: c.initiativeModifier, type: c.type, color: c.color ?? '#888888', initiative: c.initiative, statBlock: c.statBlock }}
+        initialValues={{ name: c.name, maxHp: c.maxHp, initiativeModifier: c.initiativeModifier, type: c.type, color: c.color ?? defaultColor(c.type), initiative: c.initiative, statBlock: c.statBlock }}
         onSubmit={(values) => { onUpdateBase(values); setEditingBase(false); }}
         onCancel={() => setEditingBase(false)}
       />
@@ -1284,6 +1286,12 @@ function MemberLabelDisplay({ memberId, label, onRename }: { memberId: number; l
   );
 }
 
+function defaultColor(type: string): string {
+  if (type === 'pc') return '#4caf50';
+  if (type === 'enemy' || type === 'group') return '#ef5350';
+  return '#888888';
+}
+
 // ── AddCombatantForm ──────────────────────────────────────────────────────────
 
 function AddCombatantForm({
@@ -1300,7 +1308,7 @@ function AddCombatantForm({
   const [initMod, setInitMod] = useState(initialValues?.initiativeModifier ?? 0);
   const [initiative, setInitiative] = useState(initialValues?.initiative != null ? String(initialValues.initiative) : '');
   const [type, setType] = useState<RunCombatant['type']>(initialValues?.type ?? 'enemy');
-  const [color, setColor] = useState(initialValues?.color ?? '#888888');
+  const [color, setColor] = useState(initialValues?.color ?? defaultColor(initialValues?.type ?? 'enemy'));
   const [description, setDescription] = useState('');
   const [visibleToPlayers, setVisibleToPlayers] = useState(true);
   const [members, setMembers] = useState<{ label: string; maxHp: number }[]>([]);
@@ -1354,7 +1362,7 @@ function AddCombatantForm({
         )}
         <label style={s.addLabel}>Init mod<input style={{ ...s.addInput, width: 60 }} type="number" value={initMod} onChange={(e) => setInitMod(Number(e.target.value))} /></label>
         <label style={s.addLabel}>Initiative<input style={{ ...s.addInput, width: 60 }} type="number" placeholder="—" value={initiative} onChange={(e) => setInitiative(e.target.value)} /></label>
-        <select style={s.addInput} value={type} onChange={(e) => setType(e.target.value as RunCombatant['type'])}>
+        <select style={s.addInput} value={type} onChange={(e) => { const t = e.target.value as RunCombatant['type']; setType(t); setColor(defaultColor(t)); }}>
           <option value="enemy">Enemy</option>
           <option value="npc">NPC</option>
           <option value="pc">PC</option>
