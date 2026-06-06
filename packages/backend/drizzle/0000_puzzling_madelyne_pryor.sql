@@ -43,8 +43,10 @@ CREATE TABLE `scene_images` (
 	`sort_order` integer DEFAULT 0 NOT NULL,
 	`fit` text DEFAULT 'fit' NOT NULL,
 	`playlist_id` integer,
+	`ambient_playlist_id` integer,
 	FOREIGN KEY (`scene_id`) REFERENCES `image_scenes`(`id`) ON UPDATE no action ON DELETE cascade,
-	FOREIGN KEY (`playlist_id`) REFERENCES `playlists`(`id`) ON UPDATE no action ON DELETE set null
+	FOREIGN KEY (`playlist_id`) REFERENCES `playlists`(`id`) ON UPDATE no action ON DELETE set null,
+	FOREIGN KEY (`ambient_playlist_id`) REFERENCES `playlists`(`id`) ON UPDATE no action ON DELETE set null
 );
 --> statement-breakpoint
 CREATE TABLE `encounters` (
@@ -53,9 +55,11 @@ CREATE TABLE `encounters` (
 	`name` text NOT NULL,
 	`description` text,
 	`playlist_id` integer,
+	`ambient_playlist_id` integer,
 	`sort_order` integer DEFAULT 0 NOT NULL,
 	FOREIGN KEY (`adventure_id`) REFERENCES `adventures`(`id`) ON UPDATE no action ON DELETE cascade,
-	FOREIGN KEY (`playlist_id`) REFERENCES `playlists`(`id`) ON UPDATE no action ON DELETE set null
+	FOREIGN KEY (`playlist_id`) REFERENCES `playlists`(`id`) ON UPDATE no action ON DELETE set null,
+	FOREIGN KEY (`ambient_playlist_id`) REFERENCES `playlists`(`id`) ON UPDATE no action ON DELETE set null
 );
 --> statement-breakpoint
 CREATE TABLE `combatants` (

@@ -1,8 +1,8 @@
 {
   "version": "6",
   "dialect": "sqlite",
-  "id": "b97907cd-8e22-40d3-b06d-2a2d671f27db",
-  "prevId": "b8ed8912-ddac-4504-90ae-c744897989f0",
+  "id": "93b73418-ea46-4e8d-aeb4-db1c851185b8",
+  "prevId": "b97907cd-8e22-40d3-b06d-2a2d671f27db",
   "tables": {
     "adventure_players": {
       "name": "adventure_players",
@@ -289,6 +289,13 @@
           "notNull": false,
           "autoincrement": false
         },
+        "ambient_playlist_id": {
+          "name": "ambient_playlist_id",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
         "sort_order": {
           "name": "sort_order",
           "type": "integer",
@@ -319,6 +326,19 @@
           "tableTo": "playlists",
           "columnsFrom": [
             "playlist_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "set null",
+          "onUpdate": "no action"
+        },
+        "encounters_ambient_playlist_id_playlists_id_fk": {
+          "name": "encounters_ambient_playlist_id_playlists_id_fk",
+          "tableFrom": "encounters",
+          "tableTo": "playlists",
+          "columnsFrom": [
+            "ambient_playlist_id"
           ],
           "columnsTo": [
             "id"
@@ -620,6 +640,13 @@
           "primaryKey": false,
           "notNull": false,
           "autoincrement": false
+        },
+        "ambient_playlist_id": {
+          "name": "ambient_playlist_id",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
         }
       },
       "indexes": {},
@@ -643,6 +670,19 @@
           "tableTo": "playlists",
           "columnsFrom": [
             "playlist_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "set null",
+          "onUpdate": "no action"
+        },
+        "scene_images_ambient_playlist_id_playlists_id_fk": {
+          "name": "scene_images_ambient_playlist_id_playlists_id_fk",
+          "tableFrom": "scene_images",
+          "tableTo": "playlists",
+          "columnsFrom": [
+            "ambient_playlist_id"
           ],
           "columnsTo": [
             "id"
