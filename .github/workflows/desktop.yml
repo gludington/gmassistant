@@ -20,10 +20,10 @@ jobs:
             args: --win
           - os: macos-13
             platform: mac-x64
-            args: --mac --arch x64
+            args: --mac --x64
           - os: macos-latest
             platform: mac-arm64
-            args: --mac --arch arm64
+            args: --mac --arm64
 
     runs-on: ${{ matrix.os }}
 
