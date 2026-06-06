@@ -15,6 +15,8 @@ The GM-facing combat view. Manages initiative, HP, and conditions with a live fe
 - **Groups** — multiple monsters share an initiative slot; expand on the player screen to show individual HP and conditions
 - **Temporary combatants** — add mid-fight entries that don't persist to the roster
 - **Stat blocks** — import from [Open5e](https://open5e.com/) and view in a side panel during combat
+- **Recharge abilities** — track per-creature recharge abilities with a single click
+- **Tracker scale** — resize the player-screen tracker from 0.5× to 2.0× via the Player Screen menu
 - **Auto-save** — navigate away and back to resume exactly where you left off
 
 ## Ambient Audio
@@ -24,7 +26,8 @@ A persistent audio bar at the bottom of every GM page keeps music running as you
 - **YouTube** — paste any video URL; plays through the YouTube IFrame API
 - **File upload** — MP3, M4A, OGG, FLAC, WAV, Opus, and more; stored locally
 - **Playlists** — per-adventure; attach to scenes or encounters for automatic playback
-- **Shuffle & loop** — per-playlist toggles, saved automatically
+- **Ambient playlists** — attach a separate ambient playlist to a scene or encounter that plays alongside the main playlist
+- **Shuffle & loop** — per-playlist toggles, saved automatically; shuffle starts from a random track
 - **Seamless handoff** — switching to a scene/encounter whose playlist is already playing doesn't restart the track
 
 ## Scene Images
@@ -33,8 +36,9 @@ Push atmospheric artwork to the Player Screen instantly.
 
 - Upload multiple images per scene (organised by location or mood)
 - **Fit modes** — Cover, Fit, and Center; changing mode on a live image updates the player screen without re-sending
-- **Playlist attachment** — associate a playlist with an image so it starts when you show the image
+- **Playlist attachment** — associate a playlist (and an ambient playlist) with an image so it starts when you show the image
 - **Fade transitions** — shift+click Show or Hide to crossfade the image in or out (plain click cuts instantly)
+- **Hide toggle** — hide an image from the player screen without removing it from the scene
 - Drag-to-reorder within a scene
 
 ## Player Screen
@@ -43,9 +47,10 @@ A dedicated second window for a TV, projector, or second monitor.
 
 ![Player Screen](/help/players.png)
 
-- Shows scene images as the background
+- Shows scene images as the background; last image persists across page loads
 - Initiative tracker overlays the bottom of the screen during combat
 - HP bars, condition chips, and active-combatant highlight all update in real time
+- **Tracker scale** — GM can resize the tracker text from 0.5× to 2.0× live without touching the player screen
 - **No refresh** — updates arrive via a browser BroadcastChannel; the window never reloads
 - In the desktop app, the Player Screen window opens fullscreen automatically
 
@@ -57,7 +62,10 @@ Adventures are the top-level container for everything.
 
 - **Players** — add persistent characters once; they appear automatically in every encounter
 - **Scenes** — organise images by location or mood
-- **Encounters** — each has its own combatant roster; PCs, NPCs, enemies, groups, events, and lair actions
+- **Encounters** — each has its own combatant roster; PCs, NPCs, enemies, groups, events, and lair actions; drag to reorder
+- **Stat blocks on the roster** — view or edit a combatant's stat block directly from the management page without opening full edit mode
+- **Combatant copy** — duplicate a combatant to quickly create variants
+- **Type-based default colors** — new combatants get a color automatically based on their type
 - **Playlists** — per-adventure audio libraries
 
 ## Desktop App
