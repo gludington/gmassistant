@@ -50,6 +50,7 @@ export const sceneImages = sqliteTable('scene_images', {
   sortOrder: integer('sort_order').notNull().default(0),
   fit: text('fit', { enum: ['cover', 'fit', 'center'] }).notNull().default('fit'),
   playlistId: integer('playlist_id').references(() => playlists.id, { onDelete: 'set null' }),
+  ambientPlaylistId: integer('ambient_playlist_id').references(() => playlists.id, { onDelete: 'set null' }),
 });
 
 export const encounters = sqliteTable('encounters', {
@@ -60,6 +61,7 @@ export const encounters = sqliteTable('encounters', {
   name: text('name').notNull(),
   description: text('description'),
   playlistId: integer('playlist_id').references(() => playlists.id, { onDelete: 'set null' }),
+  ambientPlaylistId: integer('ambient_playlist_id').references(() => playlists.id, { onDelete: 'set null' }),
   sortOrder: integer('sort_order').notNull().default(0),
 });
 
@@ -94,6 +96,7 @@ export const adventurePlayers = sqliteTable('adventure_players', {
     .references(() => adventures.id, { onDelete: 'cascade' }),
   name: text('name').notNull(),
   maxHp: integer('max_hp').notNull().default(10),
+  currentHp: integer('current_hp'),
   initiativeModifier: integer('initiative_modifier').notNull().default(0),
   color: text('color'),
   armorClass: integer('armor_class'),

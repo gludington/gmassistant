@@ -41,6 +41,7 @@ router.get('/:id', async (c) => {
     encounterId: id,
     name: p.name,
     maxHp: p.maxHp,
+    currentHp: p.currentHp ?? p.maxHp,
     initiativeModifier: p.initiativeModifier,
     type: 'pc' as const,
     color: p.color,

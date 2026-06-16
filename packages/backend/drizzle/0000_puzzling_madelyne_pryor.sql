@@ -89,6 +89,7 @@ CREATE TABLE `adventure_players` (
 	`adventure_id` integer NOT NULL,
 	`name` text NOT NULL,
 	`max_hp` integer DEFAULT 10 NOT NULL,
+	`current_hp` integer,
 	`initiative_modifier` integer DEFAULT 0 NOT NULL,
 	`color` text,
 	`armor_class` integer,

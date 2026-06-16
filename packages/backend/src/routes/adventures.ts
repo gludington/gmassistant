@@ -220,6 +220,18 @@ router.put('/players/:id', zValidator('json', playerSchema.partial().omit({ adve
   return c.json(updated);
 });
 
+router.patch('/players/:id/hp', zValidator('json', z.object({ currentHp: z.number().int().min(0) })), async (c) => {
+  const db = c.var.db;
+  const id = Number(c.req.param('id'));
+  const { currentHp } = c.req.valid('json');
+  const [updated] = await db.update(adventurePlayers)
+    .set({ currentHp })
+    .where(eq(adventurePlayers.id, id))
+    .returning();
+  if (!updated) return c.json({ error: 'Not found' }, 404);
+  return c.json(updated);
+});
+
 router.delete('/players/:id', async (c) => {
   const db = c.var.db;
   const id = Number(c.req.param('id'));

@@ -3,7 +3,7 @@ import { useQuery } from '@tanstack/react-query';
 import { useState, useEffect, useLayoutEffect, useRef, useMemo } from 'react';
 import type { LiveCombatant } from '@gmassisstant/types';
 import { useBroadcastSender, useBroadcastReceiver } from '../hooks/useBroadcast';
-import { CONDITIONS, conditionIcon } from '../conditions';
+import { CONDITIONS, conditionIcon, conditionDescription } from '../conditions';
 import { Open5eSearch } from '../components/Open5eSearch';
 import { GmHeader, dropdownItem, dropdownItemActive } from '../components/GmHeader';
 import { StatBlockEditor } from '../components/StatBlockEditor';
@@ -22,6 +22,7 @@ interface BaseCombatant {
   description?: string | null;
   visibleToPlayers?: boolean;
   isAdventurePlayer?: boolean;
+  currentHp?: number | null;
   armorClass?: number | null;
   spellDc?: number | null;
   passivePerception?: number | null;
@@ -123,7 +124,7 @@ function toRunCombatant(c: BaseCombatant): RunCombatant {
   return {
     id: c.id,
     name: c.name,
-    currentHp: c.maxHp,
+    currentHp: c.isAdventurePlayer && c.currentHp != null ? c.currentHp : c.maxHp,
     maxHp: c.maxHp,
     initiative: null,
     type: c.type,
@@ -204,6 +205,7 @@ function EncounterRunner() {
   const [activeCombatantId, setActiveCombatantId] = useState<number | null>(null);
   const [round, setRound] = useState(1);
   const [statBlockCombatant, setStatBlockCombatant] = useState<RunCombatant | null>(null);
+  const [concentrationCheck, setConcentrationCheck] = useState<{ id: number; name: string; dc: number } | null>(null);
   const tempIdRef = useRef(-100000);
   const runKey = `gma:run:${encounterId}`;
 
@@ -405,9 +407,28 @@ function EncounterRunner() {
     const c = combatants.find((x) => x.id === id);
     if (!c) return;
     if (c.type === 'group') return; // groups use per-member HP
+    if (delta < 0 && c.conditions.includes('Concentrating')) {
+      const damage = Math.abs(delta);
+      setConcentrationCheck({ id, name: c.name, dc: Math.max(10, Math.floor(damage / 2)) });
+    }
+    const newHp = Math.max(0, Math.min(c.maxHp, c.currentHp + delta));
     applyAndBroadcast(
-      combatants.map((x) => x.id === id ? { ...x, currentHp: Math.max(0, Math.min(x.maxHp, x.currentHp + delta)) } : x)
+      combatants.map((x) => x.id === id ? { ...x, currentHp: newHp } : x)
     );
+    if (c.isAdventurePlayer) {
+      fetch(`/api/adventures/players/${-id}/hp`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ currentHp: newHp }),
+      });
+    }
+  }
+
+  function failConcentration(id: number) {
+    applyAndBroadcast(
+      combatants.map((x) => x.id === id ? { ...x, conditions: x.conditions.filter((c) => c !== 'Concentrating') } : x)
+    );
+    setConcentrationCheck(null);
   }
 
   function resetEncounter() {
@@ -743,6 +764,19 @@ function EncounterRunner() {
           }}
         />
       )}
+      {concentrationCheck && (
+        <div style={s.concOverlay}>
+          <div style={s.concModal}>
+            <div style={s.concTitle}>🔮 Concentration Check</div>
+            <div style={s.concName}>{concentrationCheck.name}</div>
+            <div style={s.concDc}>DC {concentrationCheck.dc} Constitution save</div>
+            <div style={s.concButtons}>
+              <button style={s.concPass} onClick={() => setConcentrationCheck(null)}>✓ Passed</button>
+              <button style={s.concFail} onClick={() => failConcentration(concentrationCheck.id)}>✗ Failed</button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
@@ -918,7 +952,7 @@ function CombatantRow({
           </>
         )}
         {!isGroup && c.conditions.map((cond) => (
-          <span key={cond} style={s.condBadge} title={cond} onClick={() => {
+          <span key={cond} style={s.condBadge} title={`${cond} — ${conditionDescription(cond)}`} onClick={() => {
             const base = cond.replace(/\s+\d+$/, '');
             onUpdate({ conditions: c.conditions.filter((x) => x !== cond && !x.startsWith(base + ' ')) });
           }}>{conditionIcon(cond)}</span>
@@ -1040,7 +1074,7 @@ function CombatantRow({
                       }}
                     />
                     {m.conditions.map((cond) => (
-                      <span key={cond} style={s.condBadge} title={cond} onClick={() => {
+                      <span key={cond} style={s.condBadge} title={`${cond} — ${conditionDescription(cond)}`} onClick={() => {
                         const base = cond.replace(/\s+\d+$/, '');
                         toggleMemberCondition(m.id, base);
                       }}>{conditionIcon(cond)}</span>
@@ -1100,6 +1134,7 @@ function CombatantRow({
                             <button
                               style={{ ...s.condPickerBtn, ...(active ? s.condPickerBtnActive : {}) }}
                               onClick={() => toggleMemberCondition(m.id, cond.name, 'hasLevel' in cond ? cond.hasLevel : undefined)}
+                              title={cond.description}
                             >
                               <span style={s.condPickerIcon}>{cond.icon}</span>
                               <span style={s.condPickerName}>{cond.name}</span>
@@ -1197,6 +1232,7 @@ function CombatantRow({
               <button
                 style={{ ...s.condPickerBtn, ...(active ? s.condPickerBtnActive : {}) }}
                 onClick={() => toggleCondition(cond.name, 'hasLevel' in cond ? cond.hasLevel : undefined)}
+                title={cond.description}
               >
                 <span style={s.condPickerIcon}>{cond.icon}</span>
                 <span style={s.condPickerName}>{cond.name}</span>
@@ -2017,5 +2053,28 @@ const s: Record<string, React.CSSProperties> = {
     padding: '5px 8px', background: 'transparent', color: '#ef5350',
     border: '1px solid #ef5350', borderRadius: 4, cursor: 'pointer', fontSize: '0.78rem',
     whiteSpace: 'nowrap' as const,
+  },
+
+  // Concentration check modal
+  concOverlay: {
+    position: 'fixed' as const, inset: 0, background: 'rgba(0,0,0,0.7)',
+    display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000,
+  },
+  concModal: {
+    background: '#16213e', border: '2px solid #c9a84c', borderRadius: 10,
+    padding: '28px 36px', textAlign: 'center' as const, minWidth: 280,
+    display: 'flex', flexDirection: 'column' as const, gap: 12,
+  },
+  concTitle: { fontSize: '1.1rem', color: '#c9a84c', fontWeight: 700, letterSpacing: '0.05em' },
+  concName: { fontSize: '1.3rem', color: '#e8d5b7', fontWeight: 700 },
+  concDc: { fontSize: '1.6rem', color: '#fff', fontWeight: 700 },
+  concButtons: { display: 'flex', gap: 12, justifyContent: 'center', marginTop: 8 },
+  concPass: {
+    padding: '8px 20px', background: '#2d4a2d', color: '#4caf50',
+    border: '1px solid #3d6a3d', borderRadius: 6, cursor: 'pointer', fontSize: '1rem', fontWeight: 700,
+  },
+  concFail: {
+    padding: '8px 20px', background: '#4a1a1a', color: '#ef5350',
+    border: '1px solid #6a2a2a', borderRadius: 6, cursor: 'pointer', fontSize: '1rem', fontWeight: 700,
   },
 };

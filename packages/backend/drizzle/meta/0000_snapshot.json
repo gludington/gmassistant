@@ -1,8 +1,8 @@
 {
   "version": "6",
   "dialect": "sqlite",
-  "id": "93b73418-ea46-4e8d-aeb4-db1c851185b8",
-  "prevId": "b97907cd-8e22-40d3-b06d-2a2d671f27db",
+  "id": "a2a8f5f6-7515-4575-bd8b-1505b96cd434",
+  "prevId": "93b73418-ea46-4e8d-aeb4-db1c851185b8",
   "tables": {
     "adventure_players": {
       "name": "adventure_players",
@@ -35,6 +35,13 @@
           "notNull": true,
           "autoincrement": false,
           "default": 10
+        },
+        "current_hp": {
+          "name": "current_hp",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
         },
         "initiative_modifier": {
           "name": "initiative_modifier",
