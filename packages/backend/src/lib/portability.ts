@@ -197,7 +197,7 @@ async function storeFiles(storage: StorageAdapter, files: Map<string, Uint8Array
 
 // ─── Export ───────────────────────────────────────────────────────────────────
 
-export async function exportAdventure(db: AppDb, storage: StorageAdapter, adventureId: number): Promise<ReadableStream<Uint8Array>> {
+async function gatherAdventureExport(db: AppDb, adventureId: number): Promise<{ manifest: ExportManifest; data: AdventureData; fileKeys: string[] }> {
   const [adventure] = await db.select().from(adventuresTable).where(eq(adventuresTable.id, adventureId));
   if (!adventure) throw new Error('Adventure not found');
 
@@ -284,15 +284,14 @@ export async function exportAdventure(db: AppDb, storage: StorageAdapter, advent
     })),
   };
 
-  return streamZip(
-    { type: 'adventure', schemaVersion: SCHEMA_VERSION, exportedAt: new Date().toISOString(), name: adventure.name },
+  return {
+    manifest: { type: 'adventure', schemaVersion: SCHEMA_VERSION, exportedAt: new Date().toISOString(), name: adventure.name },
     data,
-    [...fileKeys],
-    storage,
-  );
+    fileKeys: [...fileKeys],
+  };
 }
 
-export async function exportPlaylist(db: AppDb, storage: StorageAdapter, playlistId: number): Promise<ReadableStream<Uint8Array>> {
+async function gatherPlaylistExport(db: AppDb, playlistId: number): Promise<{ manifest: ExportManifest; data: PlaylistData; fileKeys: string[] }> {
   const [pl] = await db.select().from(playlistsTable).where(eq(playlistsTable.id, playlistId));
   if (!pl) throw new Error('Playlist not found');
 
@@ -308,12 +307,38 @@ export async function exportPlaylist(db: AppDb, storage: StorageAdapter, playlis
     })),
   };
 
-  return streamZip(
-    { type: 'playlist', schemaVersion: SCHEMA_VERSION, exportedAt: new Date().toISOString(), name: pl.name },
+  return {
+    manifest: { type: 'playlist', schemaVersion: SCHEMA_VERSION, exportedAt: new Date().toISOString(), name: pl.name },
     data,
     fileKeys,
-    storage,
-  );
+  };
+}
+
+// ─── Public export API ─────────────────────────────────────────────────────────
+//
+// Two entry points per type: the *Manifest variants return just the small JSON
+// (manifest + data + the list of file keys to fetch), used by the web client
+// to assemble the zip itself — building the zip server-side means computing a
+// CRC-32 over every asset byte, which reliably exceeds the Workers Free plan's
+// 10ms CPU-time budget for any real adventure. The non-Manifest variants keep
+// building the full zip server-side, since Electron has no such limit.
+
+export async function exportAdventure(db: AppDb, storage: StorageAdapter, adventureId: number): Promise<ReadableStream<Uint8Array>> {
+  const { manifest, data, fileKeys } = await gatherAdventureExport(db, adventureId);
+  return streamZip(manifest, data, fileKeys, storage);
+}
+
+export async function exportAdventureManifest(db: AppDb, adventureId: number) {
+  return gatherAdventureExport(db, adventureId);
+}
+
+export async function exportPlaylist(db: AppDb, storage: StorageAdapter, playlistId: number): Promise<ReadableStream<Uint8Array>> {
+  const { manifest, data, fileKeys } = await gatherPlaylistExport(db, playlistId);
+  return streamZip(manifest, data, fileKeys, storage);
+}
+
+export async function exportPlaylistManifest(db: AppDb, playlistId: number) {
+  return gatherPlaylistExport(db, playlistId);
 }
 
 export async function exportEncounter(db: AppDb, encounterId: number): Promise<Uint8Array> {

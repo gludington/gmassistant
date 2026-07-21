@@ -2,6 +2,7 @@ import { Hono } from 'hono';
 import type { AppVariables } from '../types.js';
 import {
   exportAdventure, exportPlaylist, exportEncounter,
+  exportAdventureManifest, exportPlaylistManifest,
   analyzeImport, applyImport,
   analyzeImportData, applyImportData,
   type Resolutions, type ExportManifest,
@@ -43,6 +44,22 @@ router.get('/export/encounter/:id', async (c) => {
       'Content-Disposition': `attachment; filename="encounter-${id}.gma.zip"`,
     },
   });
+});
+
+// JSON-only counterparts (manifest + data + file keys, no zip) — used by the
+// web client to assemble the zip itself. See lib/portability.ts's comment on
+// exportAdventure/exportAdventureManifest for why. Encounter exports never
+// carry files, so they don't need this — the plain zip route above is cheap
+// either way.
+
+router.get('/export/adventure/:id/manifest', async (c) => {
+  const id = Number(c.req.param('id'));
+  return c.json(await exportAdventureManifest(c.var.db, id));
+});
+
+router.get('/export/playlist/:id/manifest', async (c) => {
+  const id = Number(c.req.param('id'));
+  return c.json(await exportPlaylistManifest(c.var.db, id));
 });
 
 // ─── Import ───────────────────────────────────────────────────────────────────

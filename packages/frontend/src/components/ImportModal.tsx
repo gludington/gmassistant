@@ -1,6 +1,7 @@
 import { useState, useRef } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { unzipSync } from 'fflate';
+import { isElectron } from '../lib/platform';
 
 interface ImportConflict {
   id: string;
@@ -40,10 +41,6 @@ const IMAGE_EXTS = new Set(['jpg', 'jpeg', 'png', 'gif', 'webp', 'avif']);
 // comfortably under that, hence the margin on both numbers.
 const CHUNK_THRESHOLD = 80 * 1024 * 1024;
 const CHUNK_SIZE = 40 * 1024 * 1024;
-
-function isElectron(): boolean {
-  return !!(window as { electronAPI?: unknown }).electronAPI;
-}
 
 function extractZip(buffer: Uint8Array): { manifest: ImportManifest; data: any; files: Map<string, Uint8Array> } {
   const entries = unzipSync(buffer);

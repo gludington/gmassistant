@@ -12,6 +12,8 @@ import { useAudio, type Playlist, type PlaylistTrack } from '../hooks/useAudio';
 import { usePlayerScreen } from '../hooks/usePlayerScreen';
 import { DeleteConfirmModal } from '../components/DeleteConfirmModal';
 import { preloadAssets } from '../lib/preloadAssets';
+import { downloadGmaExport } from '../lib/exportGma';
+import { isElectron } from '../lib/platform';
 
 // ── Types ────────────────────────────────────────────────────────────────────
 
@@ -154,6 +156,16 @@ function AdventureDetailPage() {
   }, [data]);
 
   const invalidate = () => qc.invalidateQueries({ queryKey: qKey });
+
+  const [exportProgress, setExportProgress] = useState<{ done: number; total: number } | null>(null);
+  async function handleExportAdventure() {
+    setExportProgress({ done: 0, total: 0 });
+    try {
+      await downloadGmaExport('adventure', Number(adventureId), `adventure-${adventureId}.gma.zip`, (done, total) => setExportProgress({ done, total }));
+    } finally {
+      setExportProgress(null);
+    }
+  }
 
   const toggleShowHp = useMutation({
     mutationFn: async (showHp: boolean) => {
@@ -376,12 +388,28 @@ function AdventureDetailPage() {
       <GmHeader
         onPlaylistChange={invalidate}
         rightSlot={
-          <a
-            href={`/api/export/adventure/${adventureId}`}
-            download
-            style={s.btnSecondary as React.CSSProperties}
-            title="Export adventure as .gma.zip"
-          >↓ Export Adventure</a>
+          isElectron() ? (
+            <a
+              href={`/api/export/adventure/${adventureId}`}
+              download
+              style={s.btnSecondary as React.CSSProperties}
+              title="Export adventure as .gma.zip"
+            >↓ Export Adventure</a>
+          ) : (
+            <button
+              type="button"
+              onClick={handleExportAdventure}
+              disabled={exportProgress != null}
+              style={s.btnSecondary as React.CSSProperties}
+              title="Export adventure as .gma.zip"
+            >
+              {exportProgress
+                ? exportProgress.total > 0
+                  ? `Exporting… ${exportProgress.done}/${exportProgress.total}`
+                  : 'Exporting…'
+                : '↓ Export Adventure'}
+            </button>
+          )
         }
         playerMenuItems={
           <>

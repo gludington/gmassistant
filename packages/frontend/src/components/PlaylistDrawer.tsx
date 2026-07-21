@@ -2,6 +2,8 @@ import { useState, useRef, useEffect } from 'react';
 import { DeleteConfirmModal } from './DeleteConfirmModal';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useAudio, type Playlist, type PlaylistTrack } from '../hooks/useAudio';
+import { downloadGmaExport } from '../lib/exportGma';
+import { isElectron } from '../lib/platform';
 
 // ── PlaylistDrawer ────────────────────────────────────────────────────────────
 
@@ -23,6 +25,16 @@ export function PlaylistDrawer({
   const [deleteTarget, setDeleteTarget] = useState<Playlist | null>(null);
   const [renamingId, setRenamingId] = useState<number | null>(null);
   const [renameName, setRenameName] = useState('');
+  const [exportingId, setExportingId] = useState<number | null>(null);
+
+  async function handleExportPlaylist(pl: Playlist) {
+    setExportingId(pl.id);
+    try {
+      await downloadGmaExport('playlist', pl.id, `playlist-${pl.id}.gma.zip`);
+    } finally {
+      setExportingId(null);
+    }
+  }
 
   const { data: playlists = [] } = useQuery<Playlist[]>({
     queryKey: ['playlists-drawer', adventureId],
@@ -200,12 +212,22 @@ export function PlaylistDrawer({
                     onClick={() => setExpandedId(isExpanded ? null : pl.id)}
                     title={isExpanded ? 'Collapse' : 'Manage tracks'}
                   >{isExpanded ? '▲' : '▼'}</button>
-                  <a
-                    href={`/api/export/playlist/${pl.id}`}
-                    download
-                    style={{ ...s.iconBtn, color: '#aaa', textDecoration: 'none' } as React.CSSProperties}
-                    title="Export playlist"
-                  >↓</a>
+                  {isElectron() ? (
+                    <a
+                      href={`/api/export/playlist/${pl.id}`}
+                      download
+                      style={{ ...s.iconBtn, color: '#aaa', textDecoration: 'none' } as React.CSSProperties}
+                      title="Export playlist"
+                    >↓</a>
+                  ) : (
+                    <button
+                      type="button"
+                      onClick={() => handleExportPlaylist(pl)}
+                      disabled={exportingId === pl.id}
+                      style={{ ...s.iconBtn, color: '#aaa' }}
+                      title="Export playlist"
+                    >{exportingId === pl.id ? '…' : '↓'}</button>
+                  )}
                   <button
                     style={{ ...s.iconBtn, color: '#e05252' }}
                     onClick={() => setDeleteTarget(pl)}
