@@ -38,7 +38,10 @@ export function createApp(db: AppDb, storage: StorageAdapter) {
     const result = await c.var.storage.get(key);
     if (!result) return c.notFound();
     return new Response(result.body, {
-      headers: { 'Content-Type': result.contentType },
+      headers: {
+        'Content-Type': result.contentType,
+        'Cache-Control': 'public, max-age=31536000, immutable',
+      },
     });
   });
 

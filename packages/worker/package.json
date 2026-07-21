@@ -6,7 +6,8 @@
   "scripts": {
     "dev": "wrangler dev",
     "deploy": "wrangler deploy",
-    "db:migrate": "wrangler d1 migrations apply gmassisstant",
+    "db:generate": "drizzle-kit generate",
+    "db:migrate": "wrangler d1 migrations apply gmassisstant --remote",
     "db:migrate:local": "wrangler d1 migrations apply gmassisstant --local"
   },
   "dependencies": {

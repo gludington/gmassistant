@@ -11,6 +11,7 @@ import { ImportModal } from '../components/ImportModal';
 import { useAudio, type Playlist, type PlaylistTrack } from '../hooks/useAudio';
 import { usePlayerScreen } from '../hooks/usePlayerScreen';
 import { DeleteConfirmModal } from '../components/DeleteConfirmModal';
+import { preloadAssets } from '../lib/preloadAssets';
 
 // ── Types ────────────────────────────────────────────────────────────────────
 
@@ -141,6 +142,16 @@ function AdventureDetailPage() {
       return res.json();
     },
   });
+
+  // Warm the asset cache as soon as the GM opens the adventure, so scene/track
+  // switches during a live session never wait on the network. YouTube tracks
+  // are streamed and excluded on purpose.
+  useEffect(() => {
+    if (!data) return;
+    const imageUrls = data.imageScenes.flatMap((s) => s.images.map((i) => i.filePath));
+    const trackUrls = data.playlists.flatMap((p) => p.tracks.filter((t) => t.type === 'file').map((t) => t.url));
+    preloadAssets([...imageUrls, ...trackUrls]);
+  }, [data]);
 
   const invalidate = () => qc.invalidateQueries({ queryKey: qKey });
 

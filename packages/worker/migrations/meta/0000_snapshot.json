@@ -1,7 +1,7 @@
 {
   "version": "6",
   "dialect": "sqlite",
-  "id": "88097ea5-bb34-4f3a-8dfc-bce7aebe5c80",
+  "id": "5d6baf0c-4bfe-4056-b21e-d800698b7e21",
   "prevId": "00000000-0000-0000-0000-000000000000",
   "tables": {
     "adventure_players": {
@@ -35,6 +35,13 @@
           "notNull": true,
           "autoincrement": false,
           "default": 10
+        },
+        "current_hp": {
+          "name": "current_hp",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
         },
         "initiative_modifier": {
           "name": "initiative_modifier",
@@ -288,6 +295,37 @@
           "primaryKey": false,
           "notNull": false,
           "autoincrement": false
+        },
+        "stop_playlist": {
+          "name": "stop_playlist",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": false
+        },
+        "ambient_playlist_id": {
+          "name": "ambient_playlist_id",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "stop_ambient": {
+          "name": "stop_ambient",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": false
+        },
+        "sort_order": {
+          "name": "sort_order",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": 0
         }
       },
       "indexes": {},
@@ -311,6 +349,19 @@
           "tableTo": "playlists",
           "columnsFrom": [
             "playlist_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "set null",
+          "onUpdate": "no action"
+        },
+        "encounters_ambient_playlist_id_playlists_id_fk": {
+          "name": "encounters_ambient_playlist_id_playlists_id_fk",
+          "tableFrom": "encounters",
+          "tableTo": "playlists",
+          "columnsFrom": [
+            "ambient_playlist_id"
           ],
           "columnsTo": [
             "id"
@@ -475,6 +526,14 @@
           "notNull": true,
           "autoincrement": false,
           "default": 0
+        },
+        "volume": {
+          "name": "volume",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": 100
         }
       },
       "indexes": {},
@@ -536,6 +595,22 @@
           "notNull": true,
           "autoincrement": false,
           "default": "'sequential'"
+        },
+        "loop": {
+          "name": "loop",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": false
+        },
+        "volume": {
+          "name": "volume",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": 100
         }
       },
       "indexes": {},
@@ -604,6 +679,29 @@
           "primaryKey": false,
           "notNull": false,
           "autoincrement": false
+        },
+        "stop_playlist": {
+          "name": "stop_playlist",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": false
+        },
+        "ambient_playlist_id": {
+          "name": "ambient_playlist_id",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "stop_ambient": {
+          "name": "stop_ambient",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": false
         }
       },
       "indexes": {},
@@ -627,6 +725,19 @@
           "tableTo": "playlists",
           "columnsFrom": [
             "playlist_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "set null",
+          "onUpdate": "no action"
+        },
+        "scene_images_ambient_playlist_id_playlists_id_fk": {
+          "name": "scene_images_ambient_playlist_id_playlists_id_fk",
+          "tableFrom": "scene_images",
+          "tableTo": "playlists",
+          "columnsFrom": [
+            "ambient_playlist_id"
           ],
           "columnsTo": [
             "id"
