@@ -166,6 +166,9 @@ router.put('/scenes/images/:imageId', zValidator('json', z.object({ sortOrder: z
 router.patch('/scenes/images/:imageId', zValidator('json', z.object({
   fit: z.enum(['cover', 'fit', 'center']).optional(),
   playlistId: z.number().int().nullable().optional(),
+  stopPlaylist: z.boolean().optional(),
+  ambientPlaylistId: z.number().int().nullable().optional(),
+  stopAmbient: z.boolean().optional(),
 })), async (c) => {
   const db = c.var.db;
   const imageId = Number(c.req.param('imageId'));

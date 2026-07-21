@@ -19,6 +19,7 @@ export const playlists = sqliteTable('playlists', {
   sortOrder: integer('sort_order').notNull().default(0),
   playMode: text('play_mode', { enum: ['sequential', 'shuffle'] }).notNull().default('sequential'),
   loop: integer('loop', { mode: 'boolean' }).notNull().default(false),
+  volume: integer('volume').notNull().default(100),
 });
 
 export const playlistTracks = sqliteTable('playlist_tracks', {
@@ -30,6 +31,7 @@ export const playlistTracks = sqliteTable('playlist_tracks', {
   type: text('type', { enum: ['file', 'youtube'] }).notNull().default('file'),
   url: text('url').notNull(),
   sortOrder: integer('sort_order').notNull().default(0),
+  volume: integer('volume').notNull().default(100),
 });
 
 export const imageScenes = sqliteTable('image_scenes', {
@@ -50,7 +52,9 @@ export const sceneImages = sqliteTable('scene_images', {
   sortOrder: integer('sort_order').notNull().default(0),
   fit: text('fit', { enum: ['cover', 'fit', 'center'] }).notNull().default('fit'),
   playlistId: integer('playlist_id').references(() => playlists.id, { onDelete: 'set null' }),
+  stopPlaylist: integer('stop_playlist', { mode: 'boolean' }).notNull().default(false),
   ambientPlaylistId: integer('ambient_playlist_id').references(() => playlists.id, { onDelete: 'set null' }),
+  stopAmbient: integer('stop_ambient', { mode: 'boolean' }).notNull().default(false),
 });
 
 export const encounters = sqliteTable('encounters', {
@@ -61,7 +65,9 @@ export const encounters = sqliteTable('encounters', {
   name: text('name').notNull(),
   description: text('description'),
   playlistId: integer('playlist_id').references(() => playlists.id, { onDelete: 'set null' }),
+  stopPlaylist: integer('stop_playlist', { mode: 'boolean' }).notNull().default(false),
   ambientPlaylistId: integer('ambient_playlist_id').references(() => playlists.id, { onDelete: 'set null' }),
+  stopAmbient: integer('stop_ambient', { mode: 'boolean' }).notNull().default(false),
   sortOrder: integer('sort_order').notNull().default(0),
 });
 

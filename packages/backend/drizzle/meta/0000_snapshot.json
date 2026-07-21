@@ -1,8 +1,8 @@
 {
   "version": "6",
   "dialect": "sqlite",
-  "id": "a2a8f5f6-7515-4575-bd8b-1505b96cd434",
-  "prevId": "93b73418-ea46-4e8d-aeb4-db1c851185b8",
+  "id": "150b58ae-28db-4b7b-920d-9e59276c9a5b",
+  "prevId": "00000000-0000-0000-0000-000000000000",
   "tables": {
     "adventure_players": {
       "name": "adventure_players",
@@ -296,12 +296,28 @@
           "notNull": false,
           "autoincrement": false
         },
+        "stop_playlist": {
+          "name": "stop_playlist",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": false
+        },
         "ambient_playlist_id": {
           "name": "ambient_playlist_id",
           "type": "integer",
           "primaryKey": false,
           "notNull": false,
           "autoincrement": false
+        },
+        "stop_ambient": {
+          "name": "stop_ambient",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": false
         },
         "sort_order": {
           "name": "sort_order",
@@ -510,6 +526,14 @@
           "notNull": true,
           "autoincrement": false,
           "default": 0
+        },
+        "volume": {
+          "name": "volume",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": 100
         }
       },
       "indexes": {},
@@ -579,6 +603,14 @@
           "notNull": true,
           "autoincrement": false,
           "default": false
+        },
+        "volume": {
+          "name": "volume",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": 100
         }
       },
       "indexes": {},
@@ -648,12 +680,28 @@
           "notNull": false,
           "autoincrement": false
         },
+        "stop_playlist": {
+          "name": "stop_playlist",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": false
+        },
         "ambient_playlist_id": {
           "name": "ambient_playlist_id",
           "type": "integer",
           "primaryKey": false,
           "notNull": false,
           "autoincrement": false
+        },
+        "stop_ambient": {
+          "name": "stop_ambient",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": false
         }
       },
       "indexes": {},

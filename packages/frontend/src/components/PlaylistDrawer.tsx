@@ -118,6 +118,7 @@ export function PlaylistDrawer({
     onSuccess: () => { invalidate(); setRenamingId(null); },
   });
 
+
   return (
     <div style={s.drawer}>
       {/* Header */}
@@ -237,6 +238,7 @@ export function PlaylistDrawer({
                     onDelete={(id) => deleteTrack.mutate(id)}
                     onReorder={(ordered) => reorderTracks.mutate(ordered)}
                     onUpdate={(id, data) => updateTrack.mutate({ id, ...data })}
+                    onVolumeChange={(id, volume) => fetch(`/api/playlists/tracks/${id}`, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ volume }) }).then(invalidate)}
                   />
                   {addingTrackId === pl.id ? (
                     <AddTrackForm
@@ -273,11 +275,12 @@ export function PlaylistDrawer({
 
 // ── TrackList ─────────────────────────────────────────────────────────────────
 
-function TrackList({ tracks, onDelete, onReorder, onUpdate }: {
+function TrackList({ tracks, onDelete, onReorder, onUpdate, onVolumeChange }: {
   tracks: PlaylistTrack[];
   onDelete: (id: number) => void;
   onReorder: (ordered: PlaylistTrack[]) => void;
   onUpdate: (id: number, data: { name: string; url: string; type: 'file' | 'youtube' }) => void;
+  onVolumeChange: (id: number, volume: number) => void;
 }) {
   const [localTracks, setLocalTracks] = useState<PlaylistTrack[]>(tracks);
   const [draggingId, setDraggingId] = useState<number | null>(null);
@@ -286,6 +289,7 @@ function TrackList({ tracks, onDelete, onReorder, onUpdate }: {
   const [editingId, setEditingId] = useState<number | null>(null);
   const [editName, setEditName] = useState('');
   const [editUrl, setEditUrl] = useState('');
+  const [localVolumes, setLocalVolumes] = useState<Record<number, number>>({});
 
   useEffect(() => {
     if (draggingId === null) setLocalTracks(tracks);
@@ -363,25 +367,40 @@ function TrackList({ tracks, onDelete, onReorder, onUpdate }: {
               </div>
             </div>
           ) : (
-            <div
-              draggable
-              onDragStart={() => handleDragStart(track.id)}
-              onDragOver={(e) => handleDragOver(e, track.id)}
-              onDrop={handleDrop}
-              onDragEnd={handleDragEnd}
-              style={{ ...s.trackRow, opacity: track.id === draggingId ? 0.35 : 1 }}
-            >
-              <span style={s.dragHandle} title="Drag to reorder">⠿</span>
-              <span style={{ fontSize: '0.72rem', flexShrink: 0, color: '#666' }}>
-                {track.type === 'youtube' ? '▶' : '🎵'}
-              </span>
-              <span style={s.trackName}>{track.name}</span>
-              <button
-                style={{ ...s.iconBtn, color: '#888' }}
-                onClick={() => { setEditingId(track.id); setEditName(track.name); setEditUrl(track.url); }}
-                title="Edit track"
-              >✏</button>
-              <button style={{ ...s.iconBtn, color: '#ef5350' }} onClick={() => onDelete(track.id)} title="Delete track">🗑</button>
+            <div style={{ opacity: track.id === draggingId ? 0.35 : 1 }}>
+              <div
+                draggable
+                onDragStart={() => handleDragStart(track.id)}
+                onDragOver={(e) => handleDragOver(e, track.id)}
+                onDrop={handleDrop}
+                onDragEnd={handleDragEnd}
+                style={s.trackRow}
+              >
+                <span style={s.dragHandle} title="Drag to reorder">⠿</span>
+                <span style={{ fontSize: '0.72rem', flexShrink: 0, color: '#666' }}>
+                  {track.type === 'youtube' ? '▶' : '🎵'}
+                </span>
+                <span style={s.trackName}>{track.name}</span>
+                <button
+                  style={{ ...s.iconBtn, color: '#888' }}
+                  onClick={() => { setEditingId(track.id); setEditName(track.name); setEditUrl(track.url); }}
+                  title="Edit track"
+                >✏</button>
+                <button style={{ ...s.iconBtn, color: '#ef5350' }} onClick={() => onDelete(track.id)} title="Delete track">🗑</button>
+              </div>
+              <div style={s.trackVolRow}>
+                <span style={s.volIcon}>🔊</span>
+                <input
+                  type="range"
+                  min={0}
+                  max={100}
+                  value={localVolumes[track.id] ?? track.volume}
+                  onChange={(e) => setLocalVolumes(prev => ({ ...prev, [track.id]: Number(e.target.value) }))}
+                  onPointerUp={() => onVolumeChange(track.id, localVolumes[track.id] ?? track.volume)}
+                  style={{ flex: 1, accentColor: '#c9a84c', cursor: 'pointer' }}
+                />
+                <span style={s.volVal}>{localVolumes[track.id] ?? track.volume}</span>
+              </div>
             </div>
           )}
         </div>
@@ -603,6 +622,31 @@ const s: Record<string, React.CSSProperties> = {
     padding: '4px 5px',
     borderRadius: 3,
     lineHeight: 1,
+  },
+  volRow: {
+    display: 'flex',
+    alignItems: 'center',
+    gap: 8,
+    padding: '0 10px 6px',
+    borderTop: '1px solid #1a1a3a',
+  },
+  trackVolRow: {
+    display: 'flex',
+    alignItems: 'center',
+    gap: 6,
+    padding: '1px 6px 4px 28px',
+  },
+  volIcon: {
+    fontSize: '0.7rem',
+    color: '#666',
+    flexShrink: 0,
+  },
+  volVal: {
+    fontSize: '0.7rem',
+    color: '#666',
+    width: 24,
+    textAlign: 'right' as const,
+    flexShrink: 0,
   },
   trackSection: {
     padding: '0 10px 10px',

@@ -54,7 +54,7 @@ router.put('/:id', zValidator('json', z.object({ name: z.string().min(1) })), as
   return c.json(updated);
 });
 
-router.patch('/:id', zValidator('json', z.object({ playMode: z.enum(['sequential', 'shuffle']).optional(), loop: z.boolean().optional() })), async (c) => {
+router.patch('/:id', zValidator('json', z.object({ playMode: z.enum(['sequential', 'shuffle']).optional(), loop: z.boolean().optional(), volume: z.number().int().min(0).max(100).optional() })), async (c) => {
   const db = c.var.db;
   const id = Number(c.req.param('id'));
   const body = c.req.valid('json');
@@ -78,6 +78,7 @@ const trackSchema = z.object({
   type: z.enum(['file', 'youtube']),
   url: z.string().min(1),
   sortOrder: z.number().int().optional().default(0),
+  volume: z.number().int().min(0).max(100).optional().default(100),
 });
 
 router.post('/tracks', zValidator('json', trackSchema), async (c) => {

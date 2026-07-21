@@ -38,6 +38,9 @@ interface EncounterData {
   showHp: boolean;
   showInitiative: boolean;
   playlistId: number | null;
+  stopPlaylist: boolean;
+  ambientPlaylistId: number | null;
+  stopAmbient: boolean;
   combatants: BaseCombatant[];
 }
 
@@ -184,7 +187,7 @@ function EncounterRunner() {
   const { encounterId } = Route.useParams();
   const navigate = useNavigate();
   const send = useBroadcastSender();
-  const { playPlaylist } = useAudio();
+  const { playPlaylist, playAmbientPlaylist, stop, stopAmbient } = useAudio();
   const { setAdventureId } = useCurrentAdventure();
   const [combatants, setCombatants] = useState<RunCombatant[]>([]);
   const [showOnPlayer, setShowOnPlayer] = useState(() => {
@@ -307,14 +310,20 @@ function EncounterRunner() {
       setInitialized(true);
       broadcast(newCombatants, initShowOnPlayer, encounter.showHp, encounter.showInitiative, initActiveId, initRound);
 
-      if (!isResume && encounter.playlistId) {
-        fetch(`/api/playlists?adventureId=${encounter.adventureId}`)
-          .then((r) => r.json())
-          .then((pls: { id: number; name: string; sortOrder: number; adventureId: number; playMode: 'sequential' | 'shuffle'; loop: boolean; tracks: { id: number; playlistId: number; name: string; type: 'file' | 'youtube'; url: string; sortOrder: number }[] }[]) => {
-            const pl = pls.find((p) => p.id === encounter.playlistId);
-            if (pl && pl.tracks.length > 0) playPlaylist(pl);
-          })
-          .catch(() => {});
+      if (!isResume) {
+        if (encounter.playlistId || encounter.stopPlaylist || encounter.ambientPlaylistId || encounter.stopAmbient) {
+          fetch(`/api/playlists?adventureId=${encounter.adventureId}`)
+            .then((r) => r.json())
+            .then((pls: { id: number; name: string; sortOrder: number; adventureId: number; playMode: 'sequential' | 'shuffle'; loop: boolean; volume: number; tracks: { id: number; playlistId: number; name: string; type: 'file' | 'youtube'; url: string; sortOrder: number; volume: number }[] }[]) => {
+              const pl = pls.find((p) => p.id === encounter.playlistId);
+              if (pl && pl.tracks.length > 0) playPlaylist(pl);
+              else if (encounter.stopPlaylist) stop();
+              const ambient = pls.find((p) => p.id === encounter.ambientPlaylistId);
+              if (ambient && ambient.tracks.length > 0) playAmbientPlaylist(ambient);
+              else if (encounter.stopAmbient) stopAmbient();
+            })
+            .catch(() => {});
+        }
       }
     }
   }, [encounter, initialized, isFetching]);

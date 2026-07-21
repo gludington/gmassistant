@@ -86,6 +86,9 @@ router.put('/:id', zValidator('json', encounterSchema.partial().omit({ adventure
 
 router.patch('/:id', zValidator('json', z.object({
   playlistId: z.number().int().nullable().optional(),
+  stopPlaylist: z.boolean().optional(),
+  ambientPlaylistId: z.number().int().nullable().optional(),
+  stopAmbient: z.boolean().optional(),
   sortOrder: z.number().int().optional(),
 })), async (c) => {
   const db = c.var.db;
@@ -93,6 +96,9 @@ router.patch('/:id', zValidator('json', z.object({
   const data = c.req.valid('json');
   const updates: Record<string, unknown> = {};
   if (data.playlistId !== undefined) updates.playlistId = data.playlistId;
+  if (data.stopPlaylist !== undefined) updates.stopPlaylist = data.stopPlaylist;
+  if (data.ambientPlaylistId !== undefined) updates.ambientPlaylistId = data.ambientPlaylistId;
+  if (data.stopAmbient !== undefined) updates.stopAmbient = data.stopAmbient;
   if (data.sortOrder !== undefined) updates.sortOrder = data.sortOrder;
   const [updated] = await db.update(encounters).set(updates).where(eq(encounters.id, id)).returning();
   if (!updated) return c.json({ error: 'Not found' }, 404);

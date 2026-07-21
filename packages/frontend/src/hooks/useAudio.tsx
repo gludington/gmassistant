@@ -7,6 +7,7 @@ export interface PlaylistTrack {
   type: 'file' | 'youtube';
   url: string;
   sortOrder: number;
+  volume: number;
 }
 
 export interface Playlist {
@@ -16,6 +17,7 @@ export interface Playlist {
   name: string;
   sortOrder: number;
   playMode: PlayMode;
+  volume: number;
   tracks: PlaylistTrack[];
 }
 
@@ -30,6 +32,10 @@ interface AudioState {
   ytVisible: boolean;
   currentTime: number;
   duration: number;
+  ambientPlaylist: Playlist | null;
+  ambientTrackIndex: number;
+  ambientIsPlaying: boolean;
+  ambientVolume: number;
 }
 
 interface AudioContextValue extends AudioState {
@@ -43,6 +49,11 @@ interface AudioContextValue extends AudioState {
   setPlayMode: (mode: PlayMode) => void;
   setYtVisible: (v: boolean) => void;
   seekTo: (t: number) => void;
+  playAmbientPlaylist: (playlist: Playlist) => void;
+  pauseAmbient: () => void;
+  resumeAmbient: () => void;
+  stopAmbient: () => void;
+  setAmbientVolume: (v: number) => void;
 }
 
 const AudioCtx = createContext<AudioContextValue | null>(null);
@@ -69,8 +80,6 @@ interface YTPlayer {
   seekTo(seconds: number, allowSeekAhead: boolean): void;
 }
 
-// Applies a quadratic curve so low slider values map to genuinely quiet levels.
-// Slider 0-100 → YouTube/HTML5 0-100 (but curved).
 function curveVolume(v: number): number {
   return (v / 100) ** 2 * 100;
 }
@@ -110,22 +119,37 @@ export function AudioProvider({ children }: { children: ReactNode }) {
     ytVisible: false,
     currentTime: 0,
     duration: 0,
+    ambientPlaylist: null,
+    ambientTrackIndex: 0,
+    ambientIsPlaying: false,
+    ambientVolume: Number(localStorage.getItem('gma:audio:ambientVolume') ?? '20'),
   });
 
   const stateRef = useRef(state);
   stateRef.current = state;
 
+  // ── Main player refs ──────────────────────────────────────────────────────
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const ytPlayerRef = useRef<YTPlayer | null>(null);
-  // true only after onReady fires — safe to call API methods
   const ytReadyRef = useRef(false);
-  // video to play as soon as the player becomes ready
   const pendingVideoRef = useRef<string | null>(null);
-  // imperative container element for the YT iframe
+  const pendingTrackVolumeRef = useRef<number>(100);
   const ytContainerRef = useRef<HTMLDivElement | null>(null);
-  // interval for polling playback position
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const playOrderRef = useRef<number[]>([]);
+  const playPosRef = useRef<number>(0);
 
+  // ── Ambient player refs ───────────────────────────────────────────────────
+  const ambientAudioRef = useRef<HTMLAudioElement | null>(null);
+  const ambientYtPlayerRef = useRef<YTPlayer | null>(null);
+  const ambientYtReadyRef = useRef(false);
+  const ambientPendingVideoRef = useRef<string | null>(null);
+  const ambientPendingTrackVolumeRef = useRef<number>(100);
+  const ambientYtContainerRef = useRef<HTMLDivElement | null>(null);
+  const ambientPlayOrderRef = useRef<number[]>([]);
+  const ambientPlayPosRef = useRef<number>(0);
+
+  // ── Main poll ─────────────────────────────────────────────────────────────
   function startPoll() {
     if (pollRef.current) return;
     pollRef.current = setInterval(() => {
@@ -148,10 +172,7 @@ export function AudioProvider({ children }: { children: ReactNode }) {
     if (pollRef.current) { clearInterval(pollRef.current); pollRef.current = null; }
   }
 
-  // play order: array of track indices; playPosRef is current position within it
-  const playOrderRef = useRef<number[]>([]);
-  const playPosRef = useRef<number>(0);
-
+  // ── Main player helpers ───────────────────────────────────────────────────
   function advanceTrack() {
     const { currentPlaylist } = stateRef.current;
     if (!currentPlaylist) return;
@@ -171,9 +192,7 @@ export function AudioProvider({ children }: { children: ReactNode }) {
 
   function onYtReady() {
     ytReadyRef.current = true;
-    if (ytPlayerRef.current) {
-      ytPlayerRef.current.setVolume(curveVolume(stateRef.current.volume));
-    }
+    if (ytPlayerRef.current) ytPlayerRef.current.setVolume(curveVolume(stateRef.current.volume));
     if (pendingVideoRef.current && ytPlayerRef.current) {
       ytPlayerRef.current.loadVideoById(pendingVideoRef.current);
       pendingVideoRef.current = null;
@@ -183,44 +202,164 @@ export function AudioProvider({ children }: { children: ReactNode }) {
 
   function onYtStateChange(e: { data: number }) {
     if (e.data === window.YT?.PlayerState?.ENDED) advanceTrack();
-    if (e.data === 1 /* PLAYING */) { startPoll(); setState((s) => ({ ...s, isPlaying: true })); }
-    if (e.data === 2 /* PAUSED */)  { stopPoll();  setState((s) => ({ ...s, isPlaying: false })); }
+    if (e.data === 1) { startPoll(); setState((s) => ({ ...s, isPlaying: true })); }
+    if (e.data === 2) { stopPoll();  setState((s) => ({ ...s, isPlaying: false })); }
   }
 
+  function stopMainAudio() {
+    stopPoll();
+    if (audioRef.current) { audioRef.current.pause(); audioRef.current.onended = null; audioRef.current = null; }
+    if (ytPlayerRef.current && ytReadyRef.current) { try { ytPlayerRef.current.stopVideo(); } catch {} }
+    pendingVideoRef.current = null;
+  }
+
+  function playTrackInner(playlist: Playlist, index: number) {
+    const track = playlist.tracks[index];
+    if (!track) return;
+    stopMainAudio();
+    const vol = track.volume ?? 100;
+    localStorage.setItem('gma:audio:volume', String(vol));
+    stateRef.current = { ...stateRef.current, volume: vol };
+    setState((s) => ({ ...s, currentPlaylist: playlist, currentTrackIndex: index, volume: vol }));
+    if (track.type === 'youtube') {
+      const videoId = extractYouTubeId(track.url);
+      if (!videoId) return;
+      if (ytReadyRef.current && ytPlayerRef.current) {
+        ytPlayerRef.current.setVolume(curveVolume(vol));
+        ytPlayerRef.current.loadVideoById(videoId);
+        startPoll();
+      } else {
+        pendingVideoRef.current = videoId;
+      }
+    } else {
+      if (ytContainerRef.current) ytContainerRef.current.style.display = 'none';
+      setState((s) => ({ ...s, ytVisible: false }));
+      const audio = new Audio(track.url);
+      audio.volume = curveVolume(vol) / 100;
+      audio.play().catch(() => {});
+      audio.onended = () => advanceTrack();
+      audioRef.current = audio;
+      startPoll();
+      setState((s) => ({ ...s, isPlaying: true }));
+    }
+  }
+
+  // ── Ambient player helpers ────────────────────────────────────────────────
+  function advanceAmbientTrack() {
+    const { ambientPlaylist } = stateRef.current;
+    if (!ambientPlaylist) return;
+    const nextPos = ambientPlayPosRef.current + 1;
+    if (nextPos < ambientPlayOrderRef.current.length) {
+      ambientPlayPosRef.current = nextPos;
+      playAmbientTrackInner(ambientPlaylist, ambientPlayOrderRef.current[nextPos]);
+    } else if (ambientPlaylist.loop) {
+      const { order, pos } = buildPlayOrder(ambientPlaylist.tracks.length, ambientPlaylist.playMode ?? 'sequential', 0);
+      ambientPlayOrderRef.current = order;
+      ambientPlayPosRef.current = pos;
+      playAmbientTrackInner(ambientPlaylist, order[pos]);
+    } else {
+      setState((s) => ({ ...s, ambientIsPlaying: false }));
+    }
+  }
+
+  function onAmbientYtReady() {
+    ambientYtReadyRef.current = true;
+    if (ambientYtPlayerRef.current) ambientYtPlayerRef.current.setVolume(curveVolume(stateRef.current.ambientVolume));
+    if (ambientPendingVideoRef.current && ambientYtPlayerRef.current) {
+      ambientYtPlayerRef.current.loadVideoById(ambientPendingVideoRef.current);
+      ambientPendingVideoRef.current = null;
+    }
+  }
+
+  function onAmbientYtStateChange(e: { data: number }) {
+    if (e.data === window.YT?.PlayerState?.ENDED) advanceAmbientTrack();
+    if (e.data === 1) setState((s) => ({ ...s, ambientIsPlaying: true }));
+    if (e.data === 2) setState((s) => ({ ...s, ambientIsPlaying: false }));
+  }
+
+  function stopAmbientAudio() {
+    if (ambientAudioRef.current) { ambientAudioRef.current.pause(); ambientAudioRef.current.onended = null; ambientAudioRef.current = null; }
+    if (ambientYtPlayerRef.current && ambientYtReadyRef.current) { try { ambientYtPlayerRef.current.stopVideo(); } catch {} }
+    ambientPendingVideoRef.current = null;
+  }
+
+  function playAmbientTrackInner(playlist: Playlist, index: number) {
+    const track = playlist.tracks[index];
+    if (!track) return;
+    stopAmbientAudio();
+    const vol = track.volume ?? 100;
+    localStorage.setItem('gma:audio:ambientVolume', String(vol));
+    stateRef.current = { ...stateRef.current, ambientVolume: vol };
+    setState((s) => ({ ...s, ambientPlaylist: playlist, ambientTrackIndex: index, ambientVolume: vol }));
+    if (track.type === 'youtube') {
+      const videoId = extractYouTubeId(track.url);
+      if (!videoId) return;
+      if (ambientYtReadyRef.current && ambientYtPlayerRef.current) {
+        ambientYtPlayerRef.current.setVolume(curveVolume(vol));
+        ambientYtPlayerRef.current.loadVideoById(videoId);
+      } else {
+        ambientPendingVideoRef.current = videoId;
+      }
+    } else {
+      if (ambientYtContainerRef.current) ambientYtContainerRef.current.style.display = 'none';
+      const audio = new Audio(track.url);
+      audio.volume = curveVolume(vol) / 100;
+      audio.play().catch(() => {});
+      audio.onended = () => advanceAmbientTrack();
+      ambientAudioRef.current = audio;
+      setState((s) => ({ ...s, ambientIsPlaying: true }));
+    }
+  }
+
+  // ── YT player setup ───────────────────────────────────────────────────────
   useEffect(() => {
-    // Wrapper stays in the DOM (ytContainerRef); YT API replaces the inner
-    // target div with an iframe, so we must keep them separate.
-    const wrapper = document.createElement('div');
-    Object.assign(wrapper.style, {
+    // Main YT container
+    const mainWrapper = document.createElement('div');
+    Object.assign(mainWrapper.style, {
       position: 'fixed', bottom: '58px', right: '20px',
       width: '320px', height: '180px', zIndex: '2000',
       background: '#000', borderRadius: '6px',
       boxShadow: '0 4px 24px rgba(0,0,0,0.7)',
-      overflow: 'hidden',
-      display: 'none',
+      overflow: 'hidden', display: 'none',
     });
-    const container = document.createElement('div');
-    wrapper.appendChild(container);
-    document.body.appendChild(wrapper);
-    ytContainerRef.current = wrapper;
+    const mainContainer = document.createElement('div');
+    mainWrapper.appendChild(mainContainer);
+    document.body.appendChild(mainWrapper);
+    ytContainerRef.current = mainWrapper;
 
-    function createPlayer() {
-      if (ytPlayerRef.current) return;
-      ytPlayerRef.current = new window.YT.Player(container, {
-        height: '180',
-        width: '320',
-        playerVars: { playsinline: 1, rel: 0, controls: 1 },
-        events: {
-          onReady: onYtReady,
-          onStateChange: onYtStateChange,
-        },
-      });
+    // Ambient YT container (hidden — ambient video not shown)
+    const ambientWrapper = document.createElement('div');
+    Object.assign(ambientWrapper.style, {
+      position: 'fixed', bottom: '-9999px', right: '-9999px',
+      width: '1px', height: '1px', zIndex: '-1',
+      overflow: 'hidden', display: 'block',
+    });
+    const ambientContainer = document.createElement('div');
+    ambientWrapper.appendChild(ambientContainer);
+    document.body.appendChild(ambientWrapper);
+    ambientYtContainerRef.current = ambientWrapper;
+
+    function createPlayers() {
+      if (!ytPlayerRef.current) {
+        ytPlayerRef.current = new window.YT.Player(mainContainer, {
+          height: '180', width: '320',
+          playerVars: { playsinline: 1, rel: 0, controls: 1 },
+          events: { onReady: onYtReady, onStateChange: onYtStateChange },
+        });
+      }
+      if (!ambientYtPlayerRef.current) {
+        ambientYtPlayerRef.current = new window.YT.Player(ambientContainer, {
+          height: '1', width: '1',
+          playerVars: { playsinline: 1, rel: 0, controls: 0 },
+          events: { onReady: onAmbientYtReady, onStateChange: onAmbientYtStateChange },
+        });
+      }
     }
 
     if (window.YT?.Player) {
-      createPlayer();
+      createPlayers();
     } else {
-      window.onYouTubeIframeAPIReady = createPlayer;
+      window.onYouTubeIframeAPIReady = createPlayers;
       if (!document.getElementById('yt-iframe-api')) {
         const tag = document.createElement('script');
         tag.id = 'yt-iframe-api';
@@ -231,58 +370,24 @@ export function AudioProvider({ children }: { children: ReactNode }) {
 
     return () => {
       if (ytPlayerRef.current) { ytPlayerRef.current.destroy(); ytPlayerRef.current = null; }
+      if (ambientYtPlayerRef.current) { ambientYtPlayerRef.current.destroy(); ambientYtPlayerRef.current = null; }
       ytReadyRef.current = false;
+      ambientYtReadyRef.current = false;
       ytContainerRef.current = null;
-      if (document.body.contains(wrapper)) document.body.removeChild(wrapper);
+      ambientYtContainerRef.current = null;
+      if (document.body.contains(mainWrapper)) document.body.removeChild(mainWrapper);
+      if (document.body.contains(ambientWrapper)) document.body.removeChild(ambientWrapper);
     };
   }, []);
 
-  function stopAudio() {
-    stopPoll();
-    if (audioRef.current) {
-      audioRef.current.pause();
-      audioRef.current.src = '';
-      audioRef.current = null;
-    }
-    if (ytPlayerRef.current && ytReadyRef.current) {
-      try { ytPlayerRef.current.stopVideo(); } catch {}
-    }
-  }
-
-  function playTrackInner(playlist: Playlist, index: number) {
-    const track = playlist.tracks[index];
-    if (!track) return;
-    stopAudio();
-    setState((s) => ({ ...s, currentPlaylist: playlist, currentTrackIndex: index }));
-
-    if (track.type === 'youtube') {
-      const videoId = extractYouTubeId(track.url);
-      if (!videoId) return;
-      if (ytReadyRef.current && ytPlayerRef.current) {
-        ytPlayerRef.current.setVolume(curveVolume(stateRef.current.volume));
-        ytPlayerRef.current.loadVideoById(videoId);
-        startPoll();
-      } else {
-        // Player not ready yet — play as soon as onReady fires
-        pendingVideoRef.current = videoId;
-      }
-    } else {
-      // Hide the YouTube panel when switching to a file track
-      if (ytContainerRef.current) ytContainerRef.current.style.display = 'none';
-      setState((s) => ({ ...s, ytVisible: false }));
-      const audio = new Audio(track.url);
-      audio.volume = stateRef.current.volume / 100;
-      audio.play().catch(() => {});
-      audio.onended = () => advanceTrack();
-      audioRef.current = audio;
-      startPoll();
-      setState((s) => ({ ...s, isPlaying: true }));
-    }
-  }
-
+  // ── Public API ────────────────────────────────────────────────────────────
   const playPlaylist = useCallback((playlist: Playlist, trackIndex = 0) => {
     if (playlist.tracks.length === 0) return;
     if (stateRef.current.currentPlaylist?.id === playlist.id) return;
+    const vol = playlist.volume ?? 100;
+    localStorage.setItem('gma:audio:volume', String(vol));
+    stateRef.current = { ...stateRef.current, volume: vol };
+    setState(s => ({ ...s, volume: vol }));
     const { order, pos } = buildPlayOrder(playlist.tracks.length, playlist.playMode ?? stateRef.current.playMode, trackIndex);
     playOrderRef.current = order;
     playPosRef.current = pos;
@@ -297,14 +402,14 @@ export function AudioProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const resume = useCallback(() => {
-    if (audioRef.current) { audioRef.current.play().catch(() => {}); }
+    if (audioRef.current) audioRef.current.play().catch(() => {});
     if (ytPlayerRef.current && ytReadyRef.current) { try { ytPlayerRef.current.playVideo(); } catch {} }
     startPoll();
     setState((s) => ({ ...s, isPlaying: true }));
   }, []);
 
   const stop = useCallback(() => {
-    stopAudio();
+    stopMainAudio();
     pendingVideoRef.current = null;
     setState((s) => ({ ...s, isPlaying: false, currentPlaylist: null, currentTime: 0, duration: 0 }));
   }, []);
@@ -343,9 +448,7 @@ export function AudioProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const setYtVisible = useCallback((v: boolean) => {
-    if (ytContainerRef.current) {
-      ytContainerRef.current.style.display = v ? 'block' : 'none';
-    }
+    if (ytContainerRef.current) ytContainerRef.current.style.display = v ? 'block' : 'none';
     setState((s) => ({ ...s, ytVisible: v }));
   }, []);
 
@@ -360,8 +463,46 @@ export function AudioProvider({ children }: { children: ReactNode }) {
     setState((s) => ({ ...s, playMode: mode }));
   }, []);
 
+  const playAmbientPlaylist = useCallback((playlist: Playlist) => {
+    if (playlist.tracks.length === 0) return;
+    if (stateRef.current.ambientPlaylist?.id === playlist.id) return;
+    const vol = playlist.volume ?? 100;
+    localStorage.setItem('gma:audio:ambientVolume', String(vol));
+    stateRef.current = { ...stateRef.current, ambientVolume: vol };
+    setState(s => ({ ...s, ambientVolume: vol }));
+    const { order, pos } = buildPlayOrder(playlist.tracks.length, playlist.playMode ?? 'sequential', 0);
+    ambientPlayOrderRef.current = order;
+    ambientPlayPosRef.current = pos;
+    playAmbientTrackInner(playlist, order[pos]);
+  }, []);
+
+  const pauseAmbient = useCallback(() => {
+    if (ambientAudioRef.current) ambientAudioRef.current.pause();
+    if (ambientYtPlayerRef.current && ambientYtReadyRef.current) { try { ambientYtPlayerRef.current.pauseVideo(); } catch {} }
+    setState((s) => ({ ...s, ambientIsPlaying: false }));
+  }, []);
+
+  const resumeAmbient = useCallback(() => {
+    if (ambientAudioRef.current) ambientAudioRef.current.play().catch(() => {});
+    if (ambientYtPlayerRef.current && ambientYtReadyRef.current) { try { ambientYtPlayerRef.current.playVideo(); } catch {} }
+    setState((s) => ({ ...s, ambientIsPlaying: true }));
+  }, []);
+
+  const stopAmbient = useCallback(() => {
+    stopAmbientAudio();
+    ambientPendingVideoRef.current = null;
+    setState((s) => ({ ...s, ambientIsPlaying: false, ambientPlaylist: null, ambientTrackIndex: 0 }));
+  }, []);
+
+  const setAmbientVolume = useCallback((v: number) => {
+    localStorage.setItem('gma:audio:ambientVolume', String(v));
+    if (ambientAudioRef.current) ambientAudioRef.current.volume = curveVolume(v) / 100;
+    if (ambientYtPlayerRef.current && ambientYtReadyRef.current) { try { ambientYtPlayerRef.current.setVolume(curveVolume(v)); } catch {} }
+    setState((s) => ({ ...s, ambientVolume: v }));
+  }, []);
+
   return (
-    <AudioCtx.Provider value={{ ...state, playPlaylist, pause, resume, stop, nextTrack, prevTrack, setVolume, setPlayMode, setYtVisible, seekTo }}>
+    <AudioCtx.Provider value={{ ...state, playPlaylist, pause, resume, stop, nextTrack, prevTrack, setVolume, setPlayMode, setYtVisible, seekTo, playAmbientPlaylist, pauseAmbient, resumeAmbient, stopAmbient, setAmbientVolume }}>
       {children}
     </AudioCtx.Provider>
   );

@@ -32,6 +32,9 @@ interface Encounter {
   name: string;
   description: string | null;
   playlistId: number | null;
+  stopPlaylist: boolean;
+  ambientPlaylistId: number | null;
+  stopAmbient: boolean;
   sortOrder: number;
   combatants: Combatant[];
 }
@@ -43,6 +46,9 @@ interface SceneImage {
   sortOrder: number;
   fit: SceneFit;
   playlistId: number | null;
+  stopPlaylist: boolean;
+  ambientPlaylistId: number | null;
+  stopAmbient: boolean;
 }
 
 interface ImageScene {
@@ -100,7 +106,7 @@ function AdventureDetailPage() {
   const send = useBroadcastSender();
   const { setAdventureId } = useCurrentAdventure();
   const { playerImage, showImage, clearImage } = usePlayerScreen();
-  const { playPlaylist } = useAudio();
+  const { playPlaylist, playAmbientPlaylist, stop, stopAmbient } = useAudio();
 
   useEffect(() => {
     setAdventureId(Number(adventureId));
@@ -119,6 +125,10 @@ function AdventureDetailPage() {
         const img = data.imageScenes.flatMap((s) => s.images).find((i) => i.filePath === playerImage.filePath);
         const pl = img?.playlistId ? data.playlists.find((p) => p.id === img.playlistId) : null;
         if (pl && pl.tracks.length > 0) playPlaylist(pl);
+        else if (img?.stopPlaylist) stop();
+        const ambient = img?.ambientPlaylistId ? data.playlists.find((p) => p.id === img.ambientPlaylistId) : null;
+        if (ambient && ambient.tracks.length > 0) playAmbientPlaylist(ambient);
+        else if (img?.stopAmbient) stopAmbient();
       }
     }
   }, []);
@@ -581,14 +591,31 @@ function SceneCard({
   const [nameDraft, setNameDraft] = useState('');
   const [uploading, setUploading] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
-  const { playPlaylist } = useAudio();
+  const { playPlaylist, playAmbientPlaylist, stop, stopAmbient } = useAudio();
 
   const setImagePlaylist = useMutation({
-    mutationFn: async ({ id, playlistId }: { id: number; playlistId: number | null }) => {
+    mutationFn: async ({ id, value }: { id: number; value: string }) => {
+      const body = value === 'stop'
+        ? { playlistId: null, stopPlaylist: true }
+        : { playlistId: value ? Number(value) : null, stopPlaylist: false };
       await fetch(`/api/adventures/scenes/images/${id}`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ playlistId }),
+        body: JSON.stringify(body),
+      });
+    },
+    onSuccess: onInvalidate,
+  });
+
+  const setImageAmbientPlaylist = useMutation({
+    mutationFn: async ({ id, value }: { id: number; value: string }) => {
+      const body = value === 'stop'
+        ? { ambientPlaylistId: null, stopAmbient: true }
+        : { ambientPlaylistId: value ? Number(value) : null, stopAmbient: false };
+      await fetch(`/api/adventures/scenes/images/${id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body),
       });
     },
     onSuccess: onInvalidate,
@@ -795,6 +822,10 @@ function SceneCard({
                           onSend(img.filePath, img.fit, transition);
                           const imgPlaylist = playlists.find((p) => p.id === img.playlistId) ?? null;
                           if (imgPlaylist && imgPlaylist.tracks.length > 0) playPlaylist(imgPlaylist);
+                          else if (img.stopPlaylist) stop();
+                          const imgAmbient = playlists.find((p) => p.id === img.ambientPlaylistId) ?? null;
+                          if (imgAmbient && imgAmbient.tracks.length > 0) playAmbientPlaylist(imgAmbient);
+                          else if (img.stopAmbient) stopAmbient();
                         }
                       }}
                     >
@@ -825,13 +856,27 @@ function SceneCard({
                   <span style={{ fontSize: '0.7rem', color: '#666' }}>🎵</span>
                   <select
                     style={{ ...s.input, fontSize: '0.7rem', padding: '2px 4px', color: '#888', flex: 1 }}
-                    value={img.playlistId ?? ''}
-                    onChange={(e) => setImagePlaylist.mutate({ id: img.id, playlistId: e.target.value ? Number(e.target.value) : null })}
+                    value={img.stopPlaylist ? 'stop' : (img.playlistId ? String(img.playlistId) : '')}
+                    onChange={(e) => setImagePlaylist.mutate({ id: img.id, value: e.target.value })}
                   >
-                    <option value="">No playlist</option>
+                    <option value="">— No change</option>
+                    <option value="stop">🔇 Stop</option>
                     {playlists.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
                   </select>
                   {img.playlistId && (() => { const pl = playlists.find((p) => p.id === img.playlistId); return pl && pl.tracks.length > 0 ? <button style={{ ...s.btnIcon, color: '#c9a84c' }} title="Play now" onClick={() => playPlaylist(pl)}>▶</button> : null; })()}
+                </div>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 4, marginTop: 2 }}>
+                  <span style={{ fontSize: '0.7rem', color: '#666' }}>🌿</span>
+                  <select
+                    style={{ ...s.input, fontSize: '0.7rem', padding: '2px 4px', color: '#888', flex: 1 }}
+                    value={img.stopAmbient ? 'stop' : (img.ambientPlaylistId ? String(img.ambientPlaylistId) : '')}
+                    onChange={(e) => setImageAmbientPlaylist.mutate({ id: img.id, value: e.target.value })}
+                  >
+                    <option value="">— No change</option>
+                    <option value="stop">🔇 Stop</option>
+                    {playlists.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
+                  </select>
+                  {img.ambientPlaylistId && (() => { const pl = playlists.find((p) => p.id === img.ambientPlaylistId); return pl && pl.tracks.length > 0 ? <button style={{ ...s.btnIcon, color: '#7cb87c' }} title="Play ambient now" onClick={() => playAmbientPlaylist(pl)}>▶</button> : null; })()}
                 </div>
               </div>
             ))}
@@ -859,7 +904,7 @@ function EncounterCard({
   const [editName, setEditName] = useState('');
   const [editDesc, setEditDesc] = useState('');
   const [isActive, setIsActive] = useState(() => !!localStorage.getItem(`gma:run:${encounter.id}`));
-  const { playPlaylist } = useAudio();
+  const { playPlaylist, playAmbientPlaylist, stop, stopAmbient } = useAudio();
   const send = useBroadcastSender();
   const { playerImage, showImage } = usePlayerScreen();
 
@@ -882,11 +927,28 @@ function EncounterCard({
   }
 
   const setEncounterPlaylist = useMutation({
-    mutationFn: async (playlistId: number | null) => {
+    mutationFn: async (value: string) => {
+      const body = value === 'stop'
+        ? { playlistId: null, stopPlaylist: true }
+        : { playlistId: value ? Number(value) : null, stopPlaylist: false };
       await fetch(`/api/encounters/${encounter.id}`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ playlistId }),
+        body: JSON.stringify(body),
+      });
+    },
+    onSuccess: onInvalidate,
+  });
+
+  const setEncounterAmbientPlaylist = useMutation({
+    mutationFn: async (value: string) => {
+      const body = value === 'stop'
+        ? { ambientPlaylistId: null, stopAmbient: true }
+        : { ambientPlaylistId: value ? Number(value) : null, stopAmbient: false };
+      await fetch(`/api/encounters/${encounter.id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body),
       });
     },
     onSuccess: onInvalidate,
@@ -904,6 +966,10 @@ function EncounterCard({
       const img = scenes.flatMap((s) => s.images).find((i) => i.filePath === playerImage.filePath);
       const pl = img?.playlistId ? playlists.find((p) => p.id === img.playlistId) : null;
       if (pl && pl.tracks.length > 0) playPlaylist(pl);
+      else if (img?.stopPlaylist) stop();
+      const ambient = img?.ambientPlaylistId ? playlists.find((p) => p.id === img.ambientPlaylistId) : null;
+      if (ambient && ambient.tracks.length > 0) playAmbientPlaylist(ambient);
+      else if (img?.stopAmbient) stopAmbient();
     }
     setIsActive(false);
   }
@@ -954,15 +1020,29 @@ function EncounterCard({
                 <span style={{ fontSize: '0.72rem', color: '#666' }}>🎵</span>
                 <select
                   style={{ ...s.input, fontSize: '0.75rem', padding: '2px 6px', color: '#888' }}
-                  value={encounter.playlistId ?? ''}
-                  onChange={(e) => setEncounterPlaylist.mutate(e.target.value ? Number(e.target.value) : null)}
+                  value={encounter.stopPlaylist ? 'stop' : (encounter.playlistId ? String(encounter.playlistId) : '')}
+                  onChange={(e) => setEncounterPlaylist.mutate(e.target.value)}
                 >
-                  <option value="">No playlist</option>
+                  <option value="">— No change</option>
+                  <option value="stop">🔇 Stop</option>
                   {playlists.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
                 </select>
                 {activePlaylist && activePlaylist.tracks.length > 0 && (
                   <button style={{ ...s.btnIcon, color: '#c9a84c' }} title="Play playlist now" onClick={() => playPlaylist(activePlaylist)}>▶</button>
                 )}
+              </div>
+              <div style={{ marginTop: 2, display: 'flex', alignItems: 'center', gap: 6 }}>
+                <span style={{ fontSize: '0.72rem', color: '#666' }}>🌿</span>
+                <select
+                  style={{ ...s.input, fontSize: '0.75rem', padding: '2px 6px', color: '#888' }}
+                  value={encounter.stopAmbient ? 'stop' : (encounter.ambientPlaylistId ? String(encounter.ambientPlaylistId) : '')}
+                  onChange={(e) => setEncounterAmbientPlaylist.mutate(e.target.value)}
+                >
+                  <option value="">— No change</option>
+                  <option value="stop">🔇 Stop</option>
+                  {playlists.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
+                </select>
+                {(() => { const pl = playlists.find((p) => p.id === encounter.ambientPlaylistId); return pl && pl.tracks.length > 0 ? <button style={{ ...s.btnIcon, color: '#7cb87c' }} title="Play ambient now" onClick={() => playAmbientPlaylist(pl)}>▶</button> : null; })()}
               </div>
             </>
           )}

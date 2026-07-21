@@ -20,11 +20,18 @@ export function AudioBar() {
     select: (s) => ({ currentPathname: s.location.pathname }),
   });
 
-  const { currentPlaylist, currentTrackIndex, isPlaying, volume, playMode, ytVisible, currentTime, duration, pause, resume, stop, nextTrack, prevTrack, setVolume, setPlayMode, setYtVisible, seekTo } = useAudio();
+  const {
+    currentPlaylist, currentTrackIndex, isPlaying, volume, playMode,
+    ytVisible, currentTime, duration,
+    pause, resume, stop, nextTrack, prevTrack, setVolume, setPlayMode, setYtVisible, seekTo,
+    ambientPlaylist, ambientTrackIndex, ambientIsPlaying, ambientVolume,
+    pauseAmbient, resumeAmbient, stopAmbient, setAmbientVolume,
+  } = useAudio();
 
   if (currentPathname === '/player') return null;
 
   const track = currentPlaylist?.tracks[currentTrackIndex];
+  const ambientTrack = ambientPlaylist?.tracks[ambientTrackIndex];
   const pct = duration > 0 ? (currentTime / duration) * 100 : 0;
 
   function handleProgressClick(e: React.MouseEvent<HTMLDivElement>) {
@@ -91,6 +98,41 @@ export function AudioBar() {
         />
         <span style={volLabel}>{volume}</span>
       </div>
+      {ambientPlaylist && (
+        <>
+          <div style={divider} />
+          <div style={ambientSection}>
+            <span style={ambientLabel}>🌿</span>
+            <div style={ambientInfo}>
+              <span style={playlistName}>{ambientPlaylist.name}</span>
+              <span style={trackName}>{ambientTrack?.name ?? '—'}</span>
+            </div>
+            {ambientIsPlaying ? (
+              <button style={btn} onClick={pauseAmbient} title="Pause ambient">⏸</button>
+            ) : (
+              <button style={btn} onClick={resumeAmbient} title="Resume ambient">▶</button>
+            )}
+            <button
+              style={{ ...btn, color: '#ef5350' }}
+              onClick={stopAmbient}
+              title="Stop ambient"
+            >
+              ⏹
+            </button>
+            <div style={volWrap}>
+              <input
+                type="range"
+                min={0}
+                max={100}
+                value={ambientVolume}
+                onChange={(e) => setAmbientVolume(Number(e.target.value))}
+                style={{ width: 64, accentColor: '#4caf87' }}
+              />
+              <span style={volLabel}>{ambientVolume}</span>
+            </div>
+          </div>
+        </>
+      )}
       <button style={ytLoginBtn} onClick={openYouTube} title="Log in to YouTube">YT</button>
     </div>
   );
@@ -194,4 +236,32 @@ const progressFill: React.CSSProperties = {
 const timeText: React.CSSProperties = {
   color: '#666',
   fontSize: '0.7rem',
+};
+
+const divider: React.CSSProperties = {
+  width: 1,
+  height: 28,
+  background: '#2a2a4a',
+  flexShrink: 0,
+};
+
+const ambientSection: React.CSSProperties = {
+  display: 'flex',
+  alignItems: 'center',
+  gap: 8,
+  flexShrink: 0,
+};
+
+const ambientLabel: React.CSSProperties = {
+  fontSize: '1rem',
+  flexShrink: 0,
+};
+
+const ambientInfo: React.CSSProperties = {
+  display: 'flex',
+  flexDirection: 'column',
+  gap: 1,
+  minWidth: 0,
+  maxWidth: 160,
+  overflow: 'hidden',
 };
