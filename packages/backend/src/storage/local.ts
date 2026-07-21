@@ -12,6 +12,8 @@ const MIME: Record<string, string> = {
 };
 
 export class LocalStorage implements StorageAdapter {
+  private multipartUploads = new Map<string, Map<number, Buffer>>();
+
   constructor(private dir: string) {}
 
   async put(key: string, body: ArrayBuffer, _contentType?: string): Promise<void> {
@@ -40,5 +42,39 @@ export class LocalStorage implements StorageAdapter {
     try {
       await unlink(join(this.dir, key));
     } catch {}
+  }
+
+  // Node has no request-body-size ceiling, so this is only exercised when
+  // testing the web import flow's chunked-upload path against a local dev
+  // server — not used by the desktop app's own (unchunked) import.
+  async createMultipartUpload(_key: string, _contentType?: string): Promise<{ uploadId: string }> {
+    const uploadId = crypto.randomUUID();
+    this.multipartUploads.set(uploadId, new Map());
+    return { uploadId };
+  }
+
+  async uploadPart(_key: string, uploadId: string, partNumber: number, body: ArrayBuffer): Promise<{ etag: string }> {
+    const parts = this.multipartUploads.get(uploadId);
+    if (!parts) throw new Error('Unknown multipart upload');
+    parts.set(partNumber, Buffer.from(body));
+    return { etag: String(partNumber) };
+  }
+
+  async completeMultipartUpload(
+    key: string,
+    uploadId: string,
+    parts: { partNumber: number; etag: string }[],
+  ): Promise<void> {
+    const stored = this.multipartUploads.get(uploadId);
+    if (!stored) throw new Error('Unknown multipart upload');
+    const ordered = [...parts].sort((a, b) => a.partNumber - b.partNumber).map((p) => {
+      const buf = stored.get(p.partNumber);
+      if (!buf) throw new Error(`Missing part ${p.partNumber}`);
+      return buf;
+    });
+    const path = join(this.dir, key);
+    await mkdir(dirname(path), { recursive: true });
+    await writeFile(path, Buffer.concat(ordered));
+    this.multipartUploads.delete(uploadId);
   }
 }

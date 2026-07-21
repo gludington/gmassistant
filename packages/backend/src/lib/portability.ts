@@ -1,4 +1,4 @@
-import { zipSync, unzipSync, type ZipOptions } from 'fflate';
+import { zipSync, unzipSync, Zip, ZipDeflate, ZipPassThrough, type ZipOptions } from 'fflate';
 import { eq, inArray, and } from 'drizzle-orm';
 import type { AppDb } from '../db/types.js';
 import type { StorageAdapter } from '../storage/types.js';
@@ -90,7 +90,10 @@ interface EncounterData {
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
-const MIME: Record<string, string> = {
+// Covers both image and audio asset extensions — reused by routes/uploads.ts's
+// multipart endpoints, which accept either kind (unlike the single-shot
+// /api/uploads and /api/playlists/upload routes, which each validate one).
+export const ASSET_MIME: Record<string, string> = {
   mp3: 'audio/mpeg', ogg: 'audio/ogg', oga: 'audio/ogg', wav: 'audio/wav',
   flac: 'audio/flac', m4a: 'audio/mp4', aac: 'audio/aac', webm: 'audio/webm',
   mp4: 'audio/mp4', opus: 'audio/opus', wma: 'audio/x-ms-wma',
@@ -98,6 +101,7 @@ const MIME: Record<string, string> = {
   jpg: 'image/jpeg', jpeg: 'image/jpeg', png: 'image/png',
   gif: 'image/gif', webp: 'image/webp', avif: 'image/avif',
 };
+const MIME = ASSET_MIME;
 
 const encoder = new TextEncoder();
 const decoder = new TextDecoder();
@@ -111,22 +115,6 @@ function toArrayBuffer(b: Uint8Array): ArrayBuffer {
   return buf as ArrayBuffer;
 }
 
-async function streamToBuffer(stream: ReadableStream<Uint8Array>): Promise<Uint8Array> {
-  const reader = stream.getReader();
-  const chunks: Uint8Array[] = [];
-  let total = 0;
-  while (true) {
-    const { done, value } = await reader.read();
-    if (done) break;
-    chunks.push(value);
-    total += value.length;
-  }
-  const out = new Uint8Array(total);
-  let off = 0;
-  for (const c of chunks) { out.set(c, off); off += c.length; }
-  return out;
-}
-
 function buildZip(manifest: ExportManifest, data: unknown, fileMap: Map<string, Uint8Array>): Uint8Array {
   const entries: Record<string, Uint8Array | [Uint8Array, ZipOptions]> = {
     'manifest.json': [encoder.encode(JSON.stringify(manifest, null, 2)), { level: 9 }],
@@ -136,6 +124,57 @@ function buildZip(manifest: ExportManifest, data: unknown, fileMap: Map<string, 
     entries[`uploads/${key}`] = [bytes, { level: 0 }];
   }
   return zipSync(entries);
+}
+
+// Streaming counterpart to buildZip, used by exportAdventure/exportPlaylist so
+// a large adventure's audio/images never have to be fully buffered in memory
+// at once (Cloudflare Workers cap isolate memory at 128MB) — files are piped
+// from storage straight into the archive one chunk at a time. Manifest/data
+// are small enough to push as a single complete chunk each.
+function streamZip(manifest: ExportManifest, data: unknown, fileKeys: string[], storage: StorageAdapter): ReadableStream<Uint8Array> {
+  return new ReadableStream<Uint8Array>({
+    async start(controller) {
+      const zip = new Zip((err, chunk, final) => {
+        if (err) { controller.error(err); return; }
+        if (chunk) controller.enqueue(chunk);
+        if (final) controller.close();
+      });
+
+      const manifestEntry = new ZipDeflate('manifest.json', { level: 9 });
+      zip.add(manifestEntry);
+      manifestEntry.push(encoder.encode(JSON.stringify(manifest, null, 2)), true);
+
+      const dataEntry = new ZipDeflate('data.json', { level: 9 });
+      zip.add(dataEntry);
+      dataEntry.push(encoder.encode(JSON.stringify(data, null, 2)), true);
+
+      try {
+        for (const key of fileKeys) {
+          const r = await storage.get(key);
+          if (!r) continue;
+
+          const entry = new ZipPassThrough(`uploads/${key}`);
+          zip.add(entry);
+
+          const reader = r.body.getReader();
+          let current = await reader.read();
+          if (current.done) {
+            entry.push(new Uint8Array(0), true);
+            continue;
+          }
+          while (true) {
+            const next = await reader.read();
+            entry.push(current.value, next.done);
+            if (next.done) break;
+            current = next;
+          }
+        }
+        zip.end();
+      } catch (err) {
+        controller.error(err);
+      }
+    },
+  });
 }
 
 function parseZip(buffer: Uint8Array): { manifest: ExportManifest; data: unknown; files: Map<string, Uint8Array> } {
@@ -158,7 +197,7 @@ async function storeFiles(storage: StorageAdapter, files: Map<string, Uint8Array
 
 // ─── Export ───────────────────────────────────────────────────────────────────
 
-export async function exportAdventure(db: AppDb, storage: StorageAdapter, adventureId: number): Promise<Uint8Array> {
+export async function exportAdventure(db: AppDb, storage: StorageAdapter, adventureId: number): Promise<ReadableStream<Uint8Array>> {
   const [adventure] = await db.select().from(adventuresTable).where(eq(adventuresTable.id, adventureId));
   if (!adventure) throw new Error('Adventure not found');
 
@@ -191,12 +230,6 @@ export async function exportAdventure(db: AppDb, storage: StorageAdapter, advent
   const fileKeys = new Set<string>();
   for (const t of trackRows) if (t.type === 'file') fileKeys.add(t.url.replace('/uploads/', ''));
   for (const img of imageRows) fileKeys.add(img.filePath.replace('/uploads/', ''));
-
-  const fileMap = new Map<string, Uint8Array>();
-  for (const key of fileKeys) {
-    const r = await storage.get(key);
-    if (r) fileMap.set(key, await streamToBuffer(r.body));
-  }
 
   const data: AdventureData = {
     adventure: { name: adventure.name, description: adventure.description, showHp: adventure.showHp, showInitiative: adventure.showInitiative },
@@ -251,23 +284,21 @@ export async function exportAdventure(db: AppDb, storage: StorageAdapter, advent
     })),
   };
 
-  return buildZip({ type: 'adventure', schemaVersion: SCHEMA_VERSION, exportedAt: new Date().toISOString(), name: adventure.name }, data, fileMap);
+  return streamZip(
+    { type: 'adventure', schemaVersion: SCHEMA_VERSION, exportedAt: new Date().toISOString(), name: adventure.name },
+    data,
+    [...fileKeys],
+    storage,
+  );
 }
 
-export async function exportPlaylist(db: AppDb, storage: StorageAdapter, playlistId: number): Promise<Uint8Array> {
+export async function exportPlaylist(db: AppDb, storage: StorageAdapter, playlistId: number): Promise<ReadableStream<Uint8Array>> {
   const [pl] = await db.select().from(playlistsTable).where(eq(playlistsTable.id, playlistId));
   if (!pl) throw new Error('Playlist not found');
 
   const trackRows = await db.select().from(tracksTable).where(eq(tracksTable.playlistId, playlistId)).orderBy(tracksTable.sortOrder);
 
-  const fileMap = new Map<string, Uint8Array>();
-  for (const t of trackRows) {
-    if (t.type === 'file') {
-      const key = t.url.replace('/uploads/', '');
-      const r = await storage.get(key);
-      if (r) fileMap.set(key, await streamToBuffer(r.body));
-    }
-  }
+  const fileKeys = trackRows.filter((t) => t.type === 'file').map((t) => t.url.replace('/uploads/', ''));
 
   const data: PlaylistData = {
     playlist: { name: pl.name, sortOrder: pl.sortOrder, playMode: pl.playMode, loop: pl.loop },
@@ -277,7 +308,12 @@ export async function exportPlaylist(db: AppDb, storage: StorageAdapter, playlis
     })),
   };
 
-  return buildZip({ type: 'playlist', schemaVersion: SCHEMA_VERSION, exportedAt: new Date().toISOString(), name: pl.name }, data, fileMap);
+  return streamZip(
+    { type: 'playlist', schemaVersion: SCHEMA_VERSION, exportedAt: new Date().toISOString(), name: pl.name },
+    data,
+    fileKeys,
+    storage,
+  );
 }
 
 export async function exportEncounter(db: AppDb, encounterId: number): Promise<Uint8Array> {

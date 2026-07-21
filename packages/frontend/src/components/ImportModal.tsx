@@ -35,6 +35,12 @@ interface ImportManifest { type: string; schemaVersion: number; exportedAt: stri
 
 const IMAGE_EXTS = new Set(['jpg', 'jpeg', 'png', 'gif', 'webp', 'avif']);
 
+// Cloudflare Workers cap request bodies at 100MB. A single upload — either
+// the whole-file POST below, or one chunk of a multipart upload — must stay
+// comfortably under that, hence the margin on both numbers.
+const CHUNK_THRESHOLD = 80 * 1024 * 1024;
+const CHUNK_SIZE = 40 * 1024 * 1024;
+
 function isElectron(): boolean {
   return !!(window as { electronAPI?: unknown }).electronAPI;
 }
@@ -52,6 +58,8 @@ function extractZip(buffer: Uint8Array): { manifest: ImportManifest; data: any; 
 }
 
 async function uploadAsset(key: string, bytes: Uint8Array): Promise<string> {
+  if (bytes.byteLength > CHUNK_THRESHOLD) return uploadAssetChunked(key, bytes);
+
   const ext = key.split('.').pop()?.toLowerCase() ?? '';
   const endpoint = IMAGE_EXTS.has(ext) ? '/api/uploads' : '/api/playlists/upload';
   const form = new FormData();
@@ -59,6 +67,44 @@ async function uploadAsset(key: string, bytes: Uint8Array): Promise<string> {
   const res = await fetch(endpoint, { method: 'POST', body: form });
   if (!res.ok) throw new Error(`Failed to upload ${key}`);
   const body = await res.json();
+  return body.url as string;
+}
+
+// For files over CHUNK_THRESHOLD (e.g. the 189MB/183MB audio tracks that
+// surfaced this need) — splits into CHUNK_SIZE pieces, each its own request,
+// via the R2-multipart-backed /api/uploads/multipart/* routes.
+async function uploadAssetChunked(key: string, bytes: Uint8Array): Promise<string> {
+  const startRes = await fetch('/api/uploads/multipart/start', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ filename: key }),
+  });
+  if (!startRes.ok) throw new Error(`Failed to start upload for ${key}`);
+  const { key: storageKey, uploadId } = await startRes.json();
+
+  const parts: { partNumber: number; etag: string }[] = [];
+  let partNumber = 1;
+  for (let offset = 0; offset < bytes.byteLength; offset += CHUNK_SIZE) {
+    const chunk = bytes.subarray(offset, Math.min(offset + CHUNK_SIZE, bytes.byteLength));
+    const form = new FormData();
+    form.append('key', storageKey);
+    form.append('uploadId', uploadId);
+    form.append('partNumber', String(partNumber));
+    form.append('file', new Blob([new Uint8Array(chunk)]), key);
+    const res = await fetch('/api/uploads/multipart/part', { method: 'POST', body: form });
+    if (!res.ok) throw new Error(`Failed to upload part ${partNumber} of ${key}`);
+    const body = await res.json();
+    parts.push({ partNumber, etag: body.etag });
+    partNumber++;
+  }
+
+  const completeRes = await fetch('/api/uploads/multipart/complete', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ key: storageKey, uploadId, parts }),
+  });
+  if (!completeRes.ok) throw new Error(`Failed to complete upload for ${key}`);
+  const body = await completeRes.json();
   return body.url as string;
 }
 
@@ -101,7 +147,7 @@ export function ImportModal({ onClose, onSuccess, defaultTargetAdventureId }: {
   const [resolutions, setResolutions] = useState<Record<string, ConflictResolution>>({});
   const [error, setError] = useState<string | null>(null);
   const [result, setResult] = useState<ImportResult | null>(null);
-  const [uploadProgress, setUploadProgress] = useState<{ done: number; total: number } | null>(null);
+  const [uploadProgress, setUploadProgress] = useState<{ done: number; total: number; fileName: string } | null>(null);
   const parsedRef = useRef<{ manifest: ImportManifest; data: any; files: Map<string, Uint8Array> } | null>(null);
 
   const { data: adventures = [] } = useQuery<Adventure[]>({
@@ -157,13 +203,13 @@ export function ImportModal({ onClose, onSuccess, defaultTargetAdventureId }: {
 
     const keyMap = new Map<string, string>();
     const entries = Array.from(files.entries());
-    setUploadProgress({ done: 0, total: entries.length });
     for (let i = 0; i < entries.length; i++) {
       const [key, bytes] = entries[i];
+      setUploadProgress({ done: i, total: entries.length, fileName: key });
       const url = await uploadAsset(key, bytes);
       keyMap.set(key, url);
-      setUploadProgress({ done: i + 1, total: entries.length });
     }
+    setUploadProgress({ done: entries.length, total: entries.length, fileName: '' });
     rewriteFileReferences(manifest, data, keyMap);
 
     const res = await fetch('/api/import/apply', {
@@ -282,7 +328,9 @@ export function ImportModal({ onClose, onSuccess, defaultTargetAdventureId }: {
           {step === 'loading' && (
             <p style={s.hint}>
               {uploadProgress
-                ? `Uploading assets… ${uploadProgress.done}/${uploadProgress.total}`
+                ? uploadProgress.fileName
+                  ? `Uploading ${uploadProgress.fileName}… (${uploadProgress.done + 1}/${uploadProgress.total})`
+                  : `Uploading assets… ${uploadProgress.done}/${uploadProgress.total}`
                 : 'Importing…'}
             </p>
           )}
