@@ -1,5 +1,6 @@
 import { useState, useRef } from 'react';
 import { useQuery } from '@tanstack/react-query';
+import { unzipSync } from 'fflate';
 
 interface ImportConflict {
   id: string;
@@ -20,6 +21,71 @@ type Step = 'pick' | 'needs_target' | 'conflicts' | 'loading' | 'done' | 'error'
 
 interface ImportResult { type: string; id: number; adventureId?: number }
 
+interface ImportManifest { type: string; schemaVersion: number; exportedAt: string; name: string }
+
+// ── Web import path ─────────────────────────────────────────────────────────
+//
+// Electron has no size/memory limits, so it just POSTs the raw .gma.zip to
+// /api/import and the server unzips it (see routes/portability.ts). Cloudflare
+// Workers do: a 100MB request body cap and a 128MB per-isolate memory limit,
+// both of which a large adventure export (audio + images) blows through. So on
+// the web, we unzip client-side instead, upload each asset individually via
+// the existing per-type upload endpoints, then send only small JSON to
+// /api/import/analyze and /api/import/apply.
+
+const IMAGE_EXTS = new Set(['jpg', 'jpeg', 'png', 'gif', 'webp', 'avif']);
+
+function isElectron(): boolean {
+  return !!(window as { electronAPI?: unknown }).electronAPI;
+}
+
+function extractZip(buffer: Uint8Array): { manifest: ImportManifest; data: any; files: Map<string, Uint8Array> } {
+  const entries = unzipSync(buffer);
+  const decoder = new TextDecoder();
+  const manifest: ImportManifest = JSON.parse(decoder.decode(entries['manifest.json']));
+  const data = JSON.parse(decoder.decode(entries['data.json']));
+  const files = new Map<string, Uint8Array>();
+  for (const [path, bytes] of Object.entries(entries)) {
+    if (path.startsWith('uploads/')) files.set(path.slice('uploads/'.length), bytes);
+  }
+  return { manifest, data, files };
+}
+
+async function uploadAsset(key: string, bytes: Uint8Array): Promise<string> {
+  const ext = key.split('.').pop()?.toLowerCase() ?? '';
+  const endpoint = IMAGE_EXTS.has(ext) ? '/api/uploads' : '/api/playlists/upload';
+  const form = new FormData();
+  form.append('file', new Blob([new Uint8Array(bytes)]), key);
+  const res = await fetch(endpoint, { method: 'POST', body: form });
+  if (!res.ok) throw new Error(`Failed to upload ${key}`);
+  const body = await res.json();
+  return body.url as string;
+}
+
+// Rewrites fileKey/url references in the parsed export data to point at the
+// freshly-uploaded keys, in place. Mirrors the shapes produced by
+// exportAdventure/exportPlaylist in packages/backend/src/lib/portability.ts.
+function rewriteFileReferences(manifest: ImportManifest, data: any, keyMap: Map<string, string>) {
+  const rewriteTracks = (tracks: any[]) => {
+    for (const t of tracks) {
+      if (t.type === 'file' && t.fileKey && keyMap.has(t.fileKey)) t.url = keyMap.get(t.fileKey);
+    }
+  };
+  if (manifest.type === 'adventure') {
+    for (const pl of data.playlists ?? []) rewriteTracks(pl.tracks ?? []);
+    for (const sc of data.imageScenes ?? []) {
+      for (const img of sc.images ?? []) {
+        if (img.fileKey && keyMap.has(img.fileKey)) {
+          img.fileKey = (keyMap.get(img.fileKey) as string).replace('/uploads/', '');
+        }
+      }
+    }
+  } else if (manifest.type === 'playlist') {
+    rewriteTracks(data.tracks ?? []);
+  }
+  // 'encounter' exports never carry files (see exportEncounter) — nothing to rewrite.
+}
+
 export function ImportModal({ onClose, onSuccess, defaultTargetAdventureId }: {
   onClose: () => void;
   onSuccess: (result: ImportResult) => void;
@@ -35,6 +101,8 @@ export function ImportModal({ onClose, onSuccess, defaultTargetAdventureId }: {
   const [resolutions, setResolutions] = useState<Record<string, ConflictResolution>>({});
   const [error, setError] = useState<string | null>(null);
   const [result, setResult] = useState<ImportResult | null>(null);
+  const [uploadProgress, setUploadProgress] = useState<{ done: number; total: number } | null>(null);
+  const parsedRef = useRef<{ manifest: ImportManifest; data: any; files: Map<string, Uint8Array> } | null>(null);
 
   const { data: adventures = [] } = useQuery<Adventure[]>({
     queryKey: ['adventures'],
@@ -42,42 +110,113 @@ export function ImportModal({ onClose, onSuccess, defaultTargetAdventureId }: {
     enabled: step === 'needs_target',
   });
 
-  async function submit(theFile: File, target?: number, theResolutions?: Record<string, ConflictResolution>) {
-    setStep('loading');
-    setError(null);
+  function handleImportResponse(body: any) {
+    if (body.status === 'needs_target') {
+      setImportType(body.type);
+      setImportName(body.name);
+      setStep('needs_target');
+    } else if (body.status === 'conflicts') {
+      setImportType(body.type);
+      setImportName(body.name);
+      const initial: Record<string, ConflictResolution> = {};
+      for (const c of body.conflicts as ImportConflict[]) {
+        initial[c.id] = { action: 'rename', newName: c.suggestedNewName };
+      }
+      setConflicts(body.conflicts);
+      setResolutions(initial);
+      setStep('conflicts');
+    } else if (body.status === 'ok') {
+      setResult(body);
+      setStep('done');
+      onSuccess(body);
+    } else if (body.status === 'skipped') {
+      setError('Import was skipped.');
+      setStep('error');
+    }
+  }
+
+  async function submitElectron(theFile: File, target?: number, theResolutions?: Record<string, ConflictResolution>) {
     const form = new FormData();
     form.append('file', theFile);
     if (target != null) form.append('targetAdventureId', String(target));
     if (theResolutions != null) form.append('resolutions', JSON.stringify(theResolutions));
 
-    try {
-      const res = await fetch('/api/import', { method: 'POST', body: form });
-      const body = await res.json();
-      if (!res.ok) { setError(body.error ?? 'Import failed'); setStep('error'); return; }
+    const res = await fetch('/api/import', { method: 'POST', body: form });
+    const body = await res.json();
+    if (!res.ok) { setError(body.error ?? 'Import failed'); setStep('error'); return; }
+    handleImportResponse(body);
+  }
 
-      if (body.status === 'needs_target') {
-        setImportType(body.type);
-        setImportName(body.name);
-        setStep('needs_target');
-      } else if (body.status === 'conflicts') {
-        setImportType(body.type);
-        setImportName(body.name);
-        const initial: Record<string, ConflictResolution> = {};
-        for (const c of body.conflicts as ImportConflict[]) {
-          initial[c.id] = { action: 'rename', newName: c.suggestedNewName };
-        }
-        setConflicts(body.conflicts);
-        setResolutions(initial);
-        setStep('conflicts');
-      } else if (body.status === 'ok') {
-        setResult(body);
-        setStep('done');
-        onSuccess(body);
-      } else if (body.status === 'skipped') {
-        setError('Import was skipped.');
-        setStep('error');
-      }
+  // Uploads every extracted asset individually, rewrites the parsed data's
+  // file references to the new keys, then applies. Only reached once conflicts
+  // (if any) are resolved — see rewriteFileReferences for the shapes involved.
+  async function finishWebImport(target?: number, theResolutions?: Record<string, ConflictResolution>) {
+    const parsed = parsedRef.current;
+    if (!parsed) return;
+    const { manifest, data, files } = parsed;
+
+    const keyMap = new Map<string, string>();
+    const entries = Array.from(files.entries());
+    setUploadProgress({ done: 0, total: entries.length });
+    for (let i = 0; i < entries.length; i++) {
+      const [key, bytes] = entries[i];
+      const url = await uploadAsset(key, bytes);
+      keyMap.set(key, url);
+      setUploadProgress({ done: i + 1, total: entries.length });
+    }
+    rewriteFileReferences(manifest, data, keyMap);
+
+    const res = await fetch('/api/import/apply', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ manifest, data, resolutions: theResolutions ?? {}, targetAdventureId: target }),
+    });
+    const body = await res.json();
+    setUploadProgress(null);
+    if (!res.ok) { setError(body.error ?? 'Import failed'); setStep('error'); return; }
+    handleImportResponse(body);
+  }
+
+  async function submitWeb(theFile: File, target?: number, theResolutions?: Record<string, ConflictResolution>) {
+    if (!parsedRef.current) {
+      const buffer = new Uint8Array(await theFile.arrayBuffer());
+      parsedRef.current = extractZip(buffer);
+    }
+
+    // Conflicts already resolved (or none existed) — go straight to upload + apply.
+    if (theResolutions != null) {
+      await finishWebImport(target, theResolutions);
+      return;
+    }
+
+    const { manifest, data } = parsedRef.current;
+    const res = await fetch('/api/import/analyze', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ manifest, data, targetAdventureId: target }),
+    });
+    const body = await res.json();
+    if (!res.ok) { setError(body.error ?? 'Import failed'); setStep('error'); return; }
+
+    if (body.status === 'needs_target') {
+      setImportType(body.type);
+      setImportName(body.name);
+      setStep('needs_target');
+    } else if (body.status === 'conflicts') {
+      handleImportResponse(body);
+    } else if (body.status === 'ready') {
+      await finishWebImport(target, {});
+    }
+  }
+
+  async function submit(theFile: File, target?: number, theResolutions?: Record<string, ConflictResolution>) {
+    setStep('loading');
+    setError(null);
+    try {
+      if (isElectron()) await submitElectron(theFile, target, theResolutions);
+      else await submitWeb(theFile, target, theResolutions);
     } catch (e) {
+      setUploadProgress(null);
       setError(String(e));
       setStep('error');
     }
@@ -86,6 +225,7 @@ export function ImportModal({ onClose, onSuccess, defaultTargetAdventureId }: {
   function handleFilePick(files: FileList | null) {
     if (!files || files.length === 0) return;
     const f = files[0];
+    parsedRef.current = null;
     setFile(f);
     submit(f);
   }
@@ -140,7 +280,11 @@ export function ImportModal({ onClose, onSuccess, defaultTargetAdventureId }: {
 
           {/* ── Loading ── */}
           {step === 'loading' && (
-            <p style={s.hint}>Importing…</p>
+            <p style={s.hint}>
+              {uploadProgress
+                ? `Uploading assets… ${uploadProgress.done}/${uploadProgress.total}`
+                : 'Importing…'}
+            </p>
           )}
 
           {/* ── Needs target adventure ── */}
@@ -232,7 +376,7 @@ export function ImportModal({ onClose, onSuccess, defaultTargetAdventureId }: {
             <>
               <p style={{ ...s.hint, color: '#ef5350' }}>{error}</p>
               <div style={s.btnRow}>
-                <button style={s.btnPrimary} type="button" onClick={() => { setStep('pick'); setFile(null); setError(null); }}>
+                <button style={s.btnPrimary} type="button" onClick={() => { parsedRef.current = null; setUploadProgress(null); setStep('pick'); setFile(null); setError(null); }}>
                   Try Again
                 </button>
                 <button style={s.btnGhost} type="button" onClick={onClose}>Close</button>

@@ -310,7 +310,13 @@ export async function analyzeImport(db: AppDb, buffer: Uint8Array, targetAdventu
   | { needsTarget: false; conflicts: ImportConflict[]; type: ExportType; name: string }
 > {
   const { manifest, data } = parseZip(buffer);
+  return analyzeImportData(db, manifest, data, targetAdventureId);
+}
 
+export async function analyzeImportData(db: AppDb, manifest: ExportManifest, data: unknown, targetAdventureId?: number): Promise<
+  | { needsTarget: true; type: ExportType; name: string }
+  | { needsTarget: false; conflicts: ImportConflict[]; type: ExportType; name: string }
+> {
   if ((manifest.type === 'playlist' || manifest.type === 'encounter') && !targetAdventureId) {
     return { needsTarget: true, type: manifest.type, name: manifest.name };
   }
@@ -355,7 +361,18 @@ export async function applyImport(
   targetAdventureId?: number,
 ): Promise<{ type: ExportType; id: number; adventureId?: number }> {
   const { manifest, data, files } = parseZip(buffer);
+  return applyImportData(db, storage, manifest, data, resolutions, targetAdventureId, files);
+}
 
+export async function applyImportData(
+  db: AppDb,
+  storage: StorageAdapter,
+  manifest: ExportManifest,
+  data: unknown,
+  resolutions: Resolutions,
+  targetAdventureId?: number,
+  files: Map<string, Uint8Array> = new Map(),
+): Promise<{ type: ExportType; id: number; adventureId?: number }> {
   if (manifest.type === 'adventure') {
     const id = await applyAdventureImport(db, storage, data as AdventureData, files, resolutions);
     return { type: 'adventure', id };
