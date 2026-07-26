@@ -5,6 +5,7 @@ import { useBroadcastSender } from '../hooks/useBroadcast';
 import { useCurrentAdventure } from '../context/AdventureContext';
 import type { SceneFit } from '@gmassisstant/types';
 import { Open5eSearch } from '../components/Open5eSearch';
+import { MonsterLibrary } from '../components/MonsterLibrary';
 import { GmHeader, dropdownItem, dropdownItemActive } from '../components/GmHeader';
 import { StatBlockEditor } from '../components/StatBlockEditor';
 import { ImportModal } from '../components/ImportModal';
@@ -27,6 +28,7 @@ interface Combatant {
   description: string | null;
   visibleToPlayers: boolean;
   statBlock?: string | null;
+  inLair?: boolean;
   members?: { id: number; label: string; maxHp: number }[];
 }
 
@@ -1122,6 +1124,15 @@ function EncounterCard({
 
 // ── CombatantManager ──────────────────────────────────────────────────────────
 
+function hasLairFlag(statBlock: string | null | undefined): boolean {
+  if (!statBlock) return false;
+  try {
+    return JSON.parse(statBlock).has_lair === true;
+  } catch {
+    return false;
+  }
+}
+
 function CombatantManager({ encounter, otherEncounters, onInvalidate }: { encounter: Encounter; otherEncounters: { id: number; name: string }[]; onInvalidate: () => void }) {
   const [showForm, setShowForm] = useState(false);
   const [editingId, setEditingId] = useState<number | null>(null);
@@ -1172,6 +1183,19 @@ function CombatantManager({ encounter, otherEncounters, onInvalidate }: { encoun
       onInvalidate();
       send({ type: 'COMBATANT_REMOVED', payload: { encounterId: encounter.id, combatantId: id } });
     },
+  });
+
+  const toggleInLair = useMutation({
+    mutationFn: async ({ id, inLair }: { id: number; inLair: boolean }) => {
+      const res = await fetch(`/api/encounters/combatants/${id}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ inLair }),
+      });
+      if (!res.ok) throw new Error('Failed to update combatant');
+      return res.json() as Promise<Combatant>;
+    },
+    onSuccess: () => onInvalidate(),
   });
 
   const copyCombatant = useMutation({
@@ -1232,6 +1256,13 @@ function CombatantManager({ encounter, otherEncounters, onInvalidate }: { encoun
                 title={c.visibleToPlayers ? 'Visible to players (click to hide)' : 'Hidden from players (click to show)'}
                 onClick={() => updateCombatant.mutate({ id: c.id, name: c.name, maxHp: c.maxHp, initiativeModifier: c.initiativeModifier, type: c.type, color: c.color ?? defaultColor(c.type), description: c.description, visibleToPlayers: !c.visibleToPlayers, statBlock: c.statBlock ?? undefined, ...(c.type === 'group' && c.members ? { members: c.members.map((m) => ({ label: m.label, maxHp: m.maxHp })) } : {}) })}
               >👁</button>
+              {hasLairFlag(c.statBlock) && (
+                <button
+                  style={{ ...s.btnIcon, color: c.inLair ? '#e0a84c' : '#555' }}
+                  title={c.inLair ? 'In its lair (+1 legendary action & resistance) — click to leave' : 'Not in its lair — click to mark as in lair'}
+                  onClick={() => toggleInLair.mutate({ id: c.id, inLair: !c.inLair })}
+                >🏰</button>
+              )}
               {(c.type === 'enemy' || c.type === 'group') && (
                 <button
                   style={{ ...s.btnIcon, color: '#ce93d8' }}
@@ -1410,6 +1441,18 @@ function CombatantForm({
   );
   const [pendingStatBlock, setPendingStatBlock] = useState<string | undefined>(initialValues?.statBlock ?? undefined);
   const [showSbEditor, setShowSbEditor] = useState(false);
+  const [justSaved, setJustSaved] = useState(false);
+
+  async function saveToLibrary() {
+    if (!name.trim()) return;
+    await fetch('/api/monsters', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ name: name.trim(), maxHp, initiativeModifier: initMod, statBlock: pendingStatBlock ?? null }),
+    });
+    setJustSaved(true);
+    setTimeout(() => setJustSaved(false), 1500);
+  }
 
   function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -1437,9 +1480,14 @@ function CombatantForm({
   return (
     <form style={{ ...s.form, marginTop: 8 }} onSubmit={handleSubmit}>
       {!initialValues && (
-        <Open5eSearch
-          onSelect={(m) => { setName(m.name); setMaxHp(m.maxHp); setInitMod(m.initiativeModifier); setType('enemy'); setPendingStatBlock(m.statBlock); }}
-        />
+        <div style={{ display: 'flex', gap: 8 }}>
+          <Open5eSearch
+            onSelect={(m) => { setName(m.name); setMaxHp(m.maxHp); setInitMod(m.initiativeModifier); setType('enemy'); setPendingStatBlock(m.statBlock); }}
+          />
+          <MonsterLibrary
+            onSelect={(m) => { setName(m.name); setMaxHp(m.maxHp); setInitMod(m.initiativeModifier); setType('enemy'); setPendingStatBlock(m.statBlock); }}
+          />
+        </div>
       )}
       <div style={s.formRow}>
         <input style={{ ...s.input, flex: 2 }} placeholder="Name" value={name} onChange={(e) => setName(e.target.value)} autoFocus />
@@ -1487,6 +1535,17 @@ function CombatantForm({
             title={pendingStatBlock ? 'Edit stat block' : 'Create stat block'}
           >
             📖 {pendingStatBlock ? 'Edit Stat Block' : 'Stat Block'}
+          </button>
+        )}
+        {type !== 'event' && type !== 'lair' && (
+          <button
+            type="button"
+            style={{ ...s.btnSecondary, color: justSaved ? '#4caf50' : '#666' }}
+            onClick={saveToLibrary}
+            disabled={!name.trim()}
+            title="Save this monster to the library for reuse"
+          >
+            {justSaved ? '✓ Saved' : '💾 Save to Library'}
           </button>
         )}
         <button style={s.btnSecondary} type="button" onClick={onCancel}>Cancel</button>

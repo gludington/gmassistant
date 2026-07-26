@@ -8,6 +8,7 @@ import encounters from './routes/encounters.js';
 import sessions from './routes/sessions.js';
 import uploads from './routes/uploads.js';
 import playlistsRouter from './routes/playlists.js';
+import monstersRouter from './routes/monsters.js';
 import portability from './routes/portability.js';
 
 export function createApp(db: AppDb, storage: StorageAdapter) {
@@ -29,6 +30,7 @@ export function createApp(db: AppDb, storage: StorageAdapter) {
   app.route('/api/sessions', sessions);
   app.route('/api/uploads', uploads);
   app.route('/api/playlists', playlistsRouter);
+  app.route('/api/monsters', monstersRouter);
   app.route('/api', portability);
 
   app.get('/health', (c) => c.json({ ok: true }));

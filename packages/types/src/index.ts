@@ -60,6 +60,27 @@ export interface Combatant {
   initiativeModifier: number;
   type: CombatantType;
   color: string | null;
+  inLair: boolean;
+}
+
+export interface MonsterFolder {
+  id: number;
+  name: string;
+  parentId: number | null;
+}
+
+export interface Monster {
+  id: number;
+  name: string;
+  maxHp: number;
+  initiativeModifier: number;
+  statBlock: string | null;
+  cr: number | null;
+  creatureType: string | null;
+  tags: string[] | null;
+  folderId: number | null;
+  origin: string | null;
+  createdAt: string;
 }
 
 export interface Session {

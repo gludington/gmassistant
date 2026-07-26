@@ -79,6 +79,11 @@ function DmHome() {
 
       <main style={styles.main}>
         <div style={styles.sectionHeader}>
+          <h2 style={styles.sectionTitle}>Monster Library</h2>
+          <Link to="/monsters" style={{ ...styles.btnSecondary, textDecoration: 'none', display: 'inline-block' }}>📚 Manage Library</Link>
+        </div>
+
+        <div style={styles.sectionHeader}>
           <h2 style={styles.sectionTitle}>Adventures</h2>
           <div style={{ display: 'flex', gap: 8 }}>
             <button style={styles.btnSecondary} onClick={() => setShowImport(true)}>↑ Import Adventure</button>

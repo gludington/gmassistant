@@ -10,6 +10,7 @@
 
 import { Route as rootRouteImport } from './routes/__root'
 import { Route as PlayerRouteImport } from './routes/player'
+import { Route as MonstersRouteImport } from './routes/monsters'
 import { Route as HelpRouteImport } from './routes/help'
 import { Route as AboutRouteImport } from './routes/about'
 import { Route as IndexRouteImport } from './routes/index'
@@ -19,6 +20,11 @@ import { Route as AdventuresAdventureIdRouteImport } from './routes/adventures.$
 const PlayerRoute = PlayerRouteImport.update({
   id: '/player',
   path: '/player',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const MonstersRoute = MonstersRouteImport.update({
+  id: '/monsters',
+  path: '/monsters',
   getParentRoute: () => rootRouteImport,
 } as any)
 const HelpRoute = HelpRouteImport.update({
@@ -51,6 +57,7 @@ export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/about': typeof AboutRoute
   '/help': typeof HelpRoute
+  '/monsters': typeof MonstersRoute
   '/player': typeof PlayerRoute
   '/adventures/$adventureId': typeof AdventuresAdventureIdRoute
   '/run/$encounterId': typeof RunEncounterIdRoute
@@ -59,6 +66,7 @@ export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/about': typeof AboutRoute
   '/help': typeof HelpRoute
+  '/monsters': typeof MonstersRoute
   '/player': typeof PlayerRoute
   '/adventures/$adventureId': typeof AdventuresAdventureIdRoute
   '/run/$encounterId': typeof RunEncounterIdRoute
@@ -68,6 +76,7 @@ export interface FileRoutesById {
   '/': typeof IndexRoute
   '/about': typeof AboutRoute
   '/help': typeof HelpRoute
+  '/monsters': typeof MonstersRoute
   '/player': typeof PlayerRoute
   '/adventures/$adventureId': typeof AdventuresAdventureIdRoute
   '/run/$encounterId': typeof RunEncounterIdRoute
@@ -78,6 +87,7 @@ export interface FileRouteTypes {
     | '/'
     | '/about'
     | '/help'
+    | '/monsters'
     | '/player'
     | '/adventures/$adventureId'
     | '/run/$encounterId'
@@ -86,6 +96,7 @@ export interface FileRouteTypes {
     | '/'
     | '/about'
     | '/help'
+    | '/monsters'
     | '/player'
     | '/adventures/$adventureId'
     | '/run/$encounterId'
@@ -94,6 +105,7 @@ export interface FileRouteTypes {
     | '/'
     | '/about'
     | '/help'
+    | '/monsters'
     | '/player'
     | '/adventures/$adventureId'
     | '/run/$encounterId'
@@ -103,6 +115,7 @@ export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
   AboutRoute: typeof AboutRoute
   HelpRoute: typeof HelpRoute
+  MonstersRoute: typeof MonstersRoute
   PlayerRoute: typeof PlayerRoute
   AdventuresAdventureIdRoute: typeof AdventuresAdventureIdRoute
   RunEncounterIdRoute: typeof RunEncounterIdRoute
@@ -115,6 +128,13 @@ declare module '@tanstack/react-router' {
       path: '/player'
       fullPath: '/player'
       preLoaderRoute: typeof PlayerRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/monsters': {
+      id: '/monsters'
+      path: '/monsters'
+      fullPath: '/monsters'
+      preLoaderRoute: typeof MonstersRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/help': {
@@ -159,6 +179,7 @@ const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
   AboutRoute: AboutRoute,
   HelpRoute: HelpRoute,
+  MonstersRoute: MonstersRoute,
   PlayerRoute: PlayerRoute,
   AdventuresAdventureIdRoute: AdventuresAdventureIdRoute,
   RunEncounterIdRoute: RunEncounterIdRoute,

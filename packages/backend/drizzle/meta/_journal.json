@@ -8,6 +8,34 @@
       "when": 1784592378142,
       "tag": "0000_giant_inhumans",
       "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "6",
+      "when": 1784693121767,
+      "tag": "0001_smooth_wind_dancer",
+      "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "6",
+      "when": 1785005868497,
+      "tag": "0002_bouncy_dreadnoughts",
+      "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "6",
+      "when": 1785016622150,
+      "tag": "0003_nebulous_dragon_man",
+      "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "6",
+      "when": 1785024247414,
+      "tag": "0004_cloudy_mister_sinister",
+      "breakpoints": true
     }
   ]
 }

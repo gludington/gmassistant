@@ -124,6 +124,7 @@ const combatantSchema = z.object({
   description: z.string().optional().nullable(),
   visibleToPlayers: z.boolean().optional().default(true),
   statBlock: z.string().optional().nullable(),
+  inLair: z.boolean().optional().default(false),
   members: z.array(z.object({ label: z.string().min(1), maxHp: z.number().int().min(1) })).optional(),
 });
 
@@ -146,6 +147,7 @@ router.post('/combatants', zValidator('json', combatantSchema), async (c) => {
     description: data.description ?? null,
     visibleToPlayers: data.visibleToPlayers ?? true,
     statBlock: data.statBlock ?? null,
+    inLair: data.inLair ?? false,
   }).returning();
 
   if (data.type === 'group' && data.members && data.members.length > 0) {
@@ -164,8 +166,18 @@ router.put('/combatants/:id', zValidator('json', combatantSchema.partial().omit(
   const id = Number(c.req.param('id'));
   const data = c.req.valid('json');
   const { members, ...fields } = data;
+  const updates: Record<string, unknown> = {};
+  if (fields.name !== undefined) updates.name = fields.name;
+  if (fields.maxHp !== undefined) updates.maxHp = fields.maxHp;
+  if (fields.initiativeModifier !== undefined) updates.initiativeModifier = fields.initiativeModifier;
+  if (fields.type !== undefined) updates.type = fields.type;
+  if (fields.color !== undefined) updates.color = fields.color ?? null;
+  if (fields.description !== undefined) updates.description = fields.description ?? null;
+  if (fields.visibleToPlayers !== undefined) updates.visibleToPlayers = fields.visibleToPlayers;
+  if (fields.statBlock !== undefined) updates.statBlock = fields.statBlock ?? null;
+  if (fields.inLair !== undefined) updates.inLair = fields.inLair;
   const [updated] = await db.update(combatants)
-    .set({ ...fields, color: fields.color ?? null, description: fields.description ?? null, visibleToPlayers: fields.visibleToPlayers ?? true })
+    .set(updates)
     .where(eq(combatants.id, id))
     .returning();
   if (!updated) return c.json({ error: 'Not found' }, 404);

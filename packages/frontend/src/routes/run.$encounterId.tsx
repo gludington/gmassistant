@@ -5,6 +5,7 @@ import type { LiveCombatant } from '@gmassisstant/types';
 import { useBroadcastSender, useBroadcastReceiver } from '../hooks/useBroadcast';
 import { CONDITIONS, conditionIcon, conditionDescription } from '../conditions';
 import { Open5eSearch } from '../components/Open5eSearch';
+import { MonsterLibrary } from '../components/MonsterLibrary';
 import { GmHeader, dropdownItem, dropdownItemActive } from '../components/GmHeader';
 import { StatBlockEditor } from '../components/StatBlockEditor';
 import { useAudio } from '../hooks/useAudio';
@@ -27,6 +28,7 @@ interface BaseCombatant {
   spellDc?: number | null;
   passivePerception?: number | null;
   statBlock?: string | null;
+  inLair?: boolean;
   members?: { id: number; label: string; maxHp: number }[];
 }
 
@@ -59,6 +61,8 @@ interface RunCombatant extends LiveCombatant {
   legendaryActionsRemaining?: number;
   legendaryResistancesMax?: number;
   legendaryResistancesRemaining?: number;
+  hasLair?: boolean;
+  inLair?: boolean;
   usedRechargeAbilities?: string[];
   autoExpanded?: boolean;
   members?: { id: number; label: string; currentHp: number; maxHp: number; conditions: string[] }[];
@@ -74,6 +78,48 @@ export const Route = createFileRoute('/run/$encounterId')({
 
 function d20() {
   return Math.floor(Math.random() * 20) + 1;
+}
+
+function parseLegendaryFromStatBlock(statBlock: string | null | undefined): { legendaryActionsMax?: number; legendaryResistancesMax?: number; hasLair?: boolean } {
+  let legendaryActionsMax: number | undefined;
+  let legendaryResistancesMax: number | undefined;
+  let hasLair: boolean | undefined;
+  if (statBlock) {
+    try {
+      const sb = JSON.parse(statBlock);
+      hasLair = sb.has_lair === true;
+      const allActions: { action_type?: string; name?: string }[] = sb.actions ?? [];
+      const legendaryActionsArray: unknown[] = sb.legendary_actions ?? [];
+      const hasLegendary = allActions.some((a) => a.action_type === 'LEGENDARY_ACTION') || legendaryActionsArray.length > 0;
+      // A real per-monster count (sb.legendary_actions_max) wins when present;
+      // 3 is just the fallback default for sources that don't provide one.
+      if (hasLegendary) legendaryActionsMax = typeof sb.legendary_actions_max === 'number' ? sb.legendary_actions_max : 3;
+      if (typeof sb.legendary_resistance === 'number' && sb.legendary_resistance > 0) {
+        legendaryResistancesMax = sb.legendary_resistance;
+      } else {
+        const traitSources: { name?: string; desc?: string }[] =
+          (sb.traits ?? []).concat(sb.special_abilities ?? []).concat(allActions);
+        for (const trait of traitSources) {
+          const name: string = trait.name ?? '';
+          if (/legendary resistance/i.test(name)) {
+            const m = /\((\d+)/i.exec(name);
+            legendaryResistancesMax = m ? parseInt(m[1], 10) : 3;
+            break;
+          }
+        }
+      }
+    } catch {}
+  }
+  return { legendaryActionsMax, legendaryResistancesMax, hasLair };
+}
+
+// A monster's lair bonus (+1 legendary action, +1 legendary resistance while
+// its lair is active) is layered on top of the base max at use-time, rather
+// than baked into legendaryActionsMax/legendaryResistancesMax directly, so
+// toggling it mid-combat can't clobber how many uses are already spent.
+function effectiveLegendaryMax(base: number | undefined, hasLair: boolean | undefined, inLair: boolean | undefined): number | undefined {
+  if (base == null) return undefined;
+  return base + (hasLair && inLair ? 1 : 0);
 }
 
 function toRunCombatant(c: BaseCombatant): RunCombatant {
@@ -100,30 +146,8 @@ function toRunCombatant(c: BaseCombatant): RunCombatant {
     };
   }
   const isGmOnly = c.type === 'event' || c.type === 'lair';
-  let legendaryActionsMax: number | undefined;
-  let legendaryResistancesMax: number | undefined;
-  if (c.statBlock) {
-    try {
-      const sb = JSON.parse(c.statBlock);
-      const allActions: { action_type?: string; name?: string }[] = sb.actions ?? [];
-      const legendaryActionsArray: unknown[] = sb.legendary_actions ?? [];
-      const hasLegendary = allActions.some((a) => a.action_type === 'LEGENDARY_ACTION') || legendaryActionsArray.length > 0;
-      if (hasLegendary) legendaryActionsMax = 3;
-      const traitSources: { name?: string; desc?: string }[] =
-        (sb.traits ?? []).concat(sb.special_abilities ?? []).concat(allActions);
-      for (const trait of traitSources) {
-        const name: string = trait.name ?? '';
-        if (/legendary resistance/i.test(name)) {
-          const m = /\((\d+)/i.exec(name);
-          legendaryResistancesMax = m ? parseInt(m[1], 10) : 3;
-          break;
-        }
-      }
-      if (legendaryResistancesMax == null && typeof sb.legendary_resistance === 'number' && sb.legendary_resistance > 0) {
-        legendaryResistancesMax = sb.legendary_resistance;
-      }
-    } catch {}
-  }
+  const { legendaryActionsMax, legendaryResistancesMax, hasLair } = parseLegendaryFromStatBlock(c.statBlock);
+  const inLair = c.inLair ?? false;
   return {
     id: c.id,
     name: c.name,
@@ -144,9 +168,11 @@ function toRunCombatant(c: BaseCombatant): RunCombatant {
     passivePerception: c.passivePerception ?? null,
     statBlock: c.statBlock ?? null,
     legendaryActionsMax,
-    legendaryActionsRemaining: legendaryActionsMax,
+    legendaryActionsRemaining: effectiveLegendaryMax(legendaryActionsMax, hasLair, inLair),
     legendaryResistancesMax,
-    legendaryResistancesRemaining: legendaryResistancesMax,
+    legendaryResistancesRemaining: effectiveLegendaryMax(legendaryResistancesMax, hasLair, inLair),
+    hasLair,
+    inLair,
     usedRechargeAbilities: [],
   };
 }
@@ -484,7 +510,8 @@ function EncounterRunner() {
         return { ...c, membersExpanded: false, autoExpanded: false };
       }
       if (c.id === nextId) {
-        const withLegendary = c.legendaryActionsMax != null ? { ...c, legendaryActionsRemaining: c.legendaryActionsMax } : c;
+        const effActMax = effectiveLegendaryMax(c.legendaryActionsMax, c.hasLair, c.inLair);
+        const withLegendary = effActMax != null ? { ...c, legendaryActionsRemaining: effActMax } : c;
         if (c.type === 'group') {
           const wasAlreadyOpen = c.membersExpanded;
           return { ...withLegendary, membersExpanded: true, autoExpanded: !wasAlreadyOpen };
@@ -561,6 +588,7 @@ function EncounterRunner() {
         members,
       };
     } else {
+      const { legendaryActionsMax, legendaryResistancesMax, hasLair } = parseLegendaryFromStatBlock(values.statBlock);
       newCombatant = {
         id: tempIdRef.current--,
         name: values.name,
@@ -577,6 +605,12 @@ function EncounterRunner() {
         editingHp: false,
         editingInit: false,
         statBlock: values.statBlock ?? null,
+        legendaryActionsMax,
+        legendaryActionsRemaining: legendaryActionsMax,
+        legendaryResistancesMax,
+        legendaryResistancesRemaining: legendaryResistancesMax,
+        hasLair,
+        inLair: false,
       };
     }
     const next = [...combatants, newCombatant];
@@ -635,6 +669,40 @@ function EncounterRunner() {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ name: c.name, maxHp: c.maxHp, initiativeModifier: c.initiativeModifier, type: c.type, color: c.color ?? defaultColor(c.type), description: c.description, visibleToPlayers: !c.visibleToPlayers, statBlock: c.statBlock ?? undefined }),
+      });
+    }
+  }
+
+  // Toggling "in lair" grants/removes the +1 legendary action & resistance use
+  // immediately (adjusting `remaining`, not just `max`), rather than fully
+  // resetting the pool — so it's safe to flip mid-combat.
+  async function toggleInLair(id: number) {
+    const c = combatants.find((x) => x.id === id);
+    if (!c) return;
+    const next = combatants.map((x) => {
+      if (x.id !== id) return x;
+      const inLair = !x.inLair;
+      const delta = inLair ? 1 : -1;
+      const newActMax = effectiveLegendaryMax(x.legendaryActionsMax, x.hasLair, inLair);
+      const newResMax = effectiveLegendaryMax(x.legendaryResistancesMax, x.hasLair, inLair);
+      return {
+        ...x,
+        inLair,
+        legendaryActionsRemaining: newActMax != null
+          ? Math.max(0, Math.min(newActMax, (x.legendaryActionsRemaining ?? newActMax) + delta))
+          : x.legendaryActionsRemaining,
+        legendaryResistancesRemaining: newResMax != null
+          ? Math.max(0, Math.min(newResMax, (x.legendaryResistancesRemaining ?? newResMax) + delta))
+          : x.legendaryResistancesRemaining,
+      };
+    });
+    setCombatants(next);
+    if (showOnPlayer) broadcast(next, true);
+    if (id > 0) {
+      await fetch(`/api/encounters/combatants/${id}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ inLair: !c.inLair }),
       });
     }
   }
@@ -755,6 +823,7 @@ function EncounterRunner() {
               onUpdate={(patch) => update(c.id, patch)}
               onUpdateBase={(values) => updateCombatantBase(c.id, values)}
               onToggleVisible={() => toggleVisibility(c.id)}
+              onToggleInLair={() => toggleInLair(c.id)}
               onSetActive={() => activateCombatant(c.id)}
               onShowStatBlock={!c.isAdventurePlayer ? () => setStatBlockCombatant(c) : undefined}
               onCopy={(targetEncounterId) => copyCombatant(c, targetEncounterId)}
@@ -800,6 +869,7 @@ function CombatantRow({
   onUpdate,
   onUpdateBase,
   onToggleVisible,
+  onToggleInLair,
   onSetActive,
   onShowStatBlock,
   onCopy,
@@ -812,6 +882,7 @@ function CombatantRow({
   onUpdate: (patch: Partial<RunCombatant>) => void;
   onUpdateBase: (values: { name: string; maxHp: number; initiativeModifier: number; type: RunCombatant['type']; color: string; statBlock?: string }) => void;
   onToggleVisible: () => void;
+  onToggleInLair: () => void;
   onSetActive: () => void;
   onShowStatBlock?: () => void;
   onCopy: (targetEncounterId: number | null) => void;
@@ -1019,26 +1090,42 @@ function CombatantRow({
           </div>
         )}
         {(rechargeActions.length > 0 || c.legendaryActionsMax != null || c.legendaryResistancesMax != null) && (
-          <div style={{ width: '100%', display: 'flex', gap: 6, flexWrap: 'wrap' }}>
-            {c.legendaryActionsMax != null && (
-              <LegendaryWidget
-                max={c.legendaryActionsMax}
-                remaining={c.legendaryActionsRemaining ?? c.legendaryActionsMax}
-                onSpend={() => onUpdate({ legendaryActionsRemaining: Math.max(0, (c.legendaryActionsRemaining ?? c.legendaryActionsMax!) - 1) })}
-                onRestore={() => onUpdate({ legendaryActionsRemaining: Math.min(c.legendaryActionsMax!, (c.legendaryActionsRemaining ?? c.legendaryActionsMax!) + 1) })}
-                onReset={() => onUpdate({ legendaryActionsRemaining: c.legendaryActionsMax })}
-                onSetMax={(n) => onUpdate({ legendaryActionsMax: n, legendaryActionsRemaining: n })}
-              />
+          <div style={{ width: '100%', display: 'flex', gap: 6, flexWrap: 'wrap', alignItems: 'center' }}>
+            {c.hasLair && (
+              <button
+                type="button"
+                style={{ ...s.lairToggle, ...(c.inLair ? s.lairToggleActive : {}) }}
+                onClick={onToggleInLair}
+                title={c.inLair ? 'In its lair (+1 legendary action & resistance) — click to leave' : 'Not in its lair — click to mark as in lair (+1 legendary action & resistance)'}
+              >
+                🏰 {c.inLair ? 'In Lair' : 'Not in Lair'}
+              </button>
             )}
-            {c.legendaryResistancesMax != null && (
-              <ResistanceWidget
-                max={c.legendaryResistancesMax}
-                remaining={c.legendaryResistancesRemaining ?? c.legendaryResistancesMax}
-                onSpend={() => onUpdate({ legendaryResistancesRemaining: Math.max(0, (c.legendaryResistancesRemaining ?? c.legendaryResistancesMax!) - 1) })}
-                onRestore={() => onUpdate({ legendaryResistancesRemaining: Math.min(c.legendaryResistancesMax!, (c.legendaryResistancesRemaining ?? c.legendaryResistancesMax!) + 1) })}
-                onSetMax={(n) => onUpdate({ legendaryResistancesMax: n, legendaryResistancesRemaining: Math.min(c.legendaryResistancesRemaining ?? n, n) })}
-              />
-            )}
+            {c.legendaryActionsMax != null && (() => {
+              const effMax = effectiveLegendaryMax(c.legendaryActionsMax, c.hasLair, c.inLair)!;
+              return (
+                <LegendaryWidget
+                  max={effMax}
+                  remaining={c.legendaryActionsRemaining ?? effMax}
+                  onSpend={() => onUpdate({ legendaryActionsRemaining: Math.max(0, (c.legendaryActionsRemaining ?? effMax) - 1) })}
+                  onRestore={() => onUpdate({ legendaryActionsRemaining: Math.min(effMax, (c.legendaryActionsRemaining ?? effMax) + 1) })}
+                  onReset={() => onUpdate({ legendaryActionsRemaining: effMax })}
+                  onSetMax={(n) => onUpdate({ legendaryActionsMax: n - (c.hasLair && c.inLair ? 1 : 0), legendaryActionsRemaining: n })}
+                />
+              );
+            })()}
+            {c.legendaryResistancesMax != null && (() => {
+              const effMax = effectiveLegendaryMax(c.legendaryResistancesMax, c.hasLair, c.inLair)!;
+              return (
+                <ResistanceWidget
+                  max={effMax}
+                  remaining={c.legendaryResistancesRemaining ?? effMax}
+                  onSpend={() => onUpdate({ legendaryResistancesRemaining: Math.max(0, (c.legendaryResistancesRemaining ?? effMax) - 1) })}
+                  onRestore={() => onUpdate({ legendaryResistancesRemaining: Math.min(effMax, (c.legendaryResistancesRemaining ?? effMax) + 1) })}
+                  onSetMax={(n) => onUpdate({ legendaryResistancesMax: n - (c.hasLair && c.inLair ? 1 : 0), legendaryResistancesRemaining: n })}
+                />
+              );
+            })()}
             {rechargeActions.map((ra) => (
               <RechargeWidget
                 key={ra.name}
@@ -1359,6 +1446,18 @@ function AddCombatantForm({
   const [members, setMembers] = useState<{ label: string; maxHp: number }[]>([]);
   const [pendingStatBlock, setPendingStatBlock] = useState<string | undefined>(initialValues?.statBlock ?? undefined);
   const [showSbEditor, setShowSbEditor] = useState(false);
+  const [justSaved, setJustSaved] = useState(false);
+
+  async function saveToLibrary() {
+    if (!name.trim()) return;
+    await fetch('/api/monsters', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ name: name.trim(), maxHp, initiativeModifier: initMod, statBlock: pendingStatBlock ?? null }),
+    });
+    setJustSaved(true);
+    setTimeout(() => setJustSaved(false), 1500);
+  }
 
   function addMember() {
     setMembers((prev) => [...prev, { label: '', maxHp: 10 }]);
@@ -1396,10 +1495,14 @@ function AddCombatantForm({
 
   return (
     <form style={s.addForm} onSubmit={handleSubmit}>
-      <Open5eSearch
-        style={{ marginBottom: 8 }}
-        onSelect={(m) => { setName(m.name); setMaxHp(m.maxHp); setInitMod(m.initiativeModifier); setType('enemy'); setPendingStatBlock(m.statBlock); }}
-      />
+      <div style={{ display: 'flex', gap: 8, marginBottom: 8 }}>
+        <Open5eSearch
+          onSelect={(m) => { setName(m.name); setMaxHp(m.maxHp); setInitMod(m.initiativeModifier); setType('enemy'); setPendingStatBlock(m.statBlock); }}
+        />
+        <MonsterLibrary
+          onSelect={(m) => { setName(m.name); setMaxHp(m.maxHp); setInitMod(m.initiativeModifier); setType('enemy'); setPendingStatBlock(m.statBlock); }}
+        />
+      </div>
       <div style={s.addFormRow}>
         <input style={{ ...s.addInput, flex: 2 }} placeholder="Name" value={name} onChange={(e) => setName(e.target.value)} autoFocus />
         {!isGroup && type !== 'event' && type !== 'lair' && (
@@ -1435,6 +1538,17 @@ function AddCombatantForm({
             title={pendingStatBlock ? 'Edit stat block' : 'Create stat block'}
           >
             📖 {pendingStatBlock ? 'Edit Stat Block' : 'Stat Block'}
+          </button>
+        )}
+        {type !== 'event' && type !== 'lair' && (
+          <button
+            type="button"
+            style={{ ...s.btnGhost, color: justSaved ? '#4caf50' : '#666' }}
+            onClick={saveToLibrary}
+            disabled={!name.trim()}
+            title="Save this monster to the library for reuse"
+          >
+            {justSaved ? '✓ Saved' : '💾 Save to Library'}
           </button>
         )}
         <button style={s.btnGhost} type="button" onClick={onCancel}>Cancel</button>
@@ -1857,6 +1971,14 @@ function typeStyle(type: RunCombatant['type']): React.CSSProperties {
 // ── Styles ────────────────────────────────────────────────────────────────────
 
 const s: Record<string, React.CSSProperties> = {
+  lairToggle: {
+    display: 'flex', alignItems: 'center', gap: 4,
+    background: 'none', border: '1px solid #444', borderRadius: 4,
+    color: '#888', cursor: 'pointer', fontSize: '0.75rem', padding: '3px 8px',
+  },
+  lairToggleActive: {
+    background: '#4a2d0a', border: '1px solid #c9861a', color: '#e0a84c',
+  },
   page: { minHeight: '100vh', background: '#1a1a2e', color: '#e0e0e0', paddingBottom: 60 },
   back: { color: '#c9a84c', textDecoration: 'none', fontSize: '0.875rem', whiteSpace: 'nowrap' },
   title: { margin: 0, fontSize: '1.4rem', color: '#c9a84c', flexShrink: 1, minWidth: 0, maxWidth: 220, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' as const },
